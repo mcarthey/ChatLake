@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ChatLake.Core\ChatLake.Core.csproj" />
+    <ProjectReference Include="..\..\src\ChatLake.Infrastructure\ChatLake.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

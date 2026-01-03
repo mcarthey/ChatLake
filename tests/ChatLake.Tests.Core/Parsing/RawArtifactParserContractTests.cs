@@ -17,7 +17,12 @@ public abstract class RawArtifactParserContractTests
         var result1 = parser.Parse(ValidJsonSample);
         var result2 = parser.Parse(ValidJsonSample);
 
-        Assert.Equal(result1, result2);
+        Assert.Equal(result1.Count, result2.Count);
+
+        for (int i = 0; i < result1.Count; i++)
+        {
+            Assert.Equal(result1.ElementAt(i), result2.ElementAt(i));
+        }
     }
 
     [Fact]
@@ -39,7 +44,7 @@ public abstract class RawArtifactParserContractTests
 
         foreach (var conversation in conversations)
         {
-            Assert.NotNull(conversation.Messages);
+            Assert.False(conversation.Messages.IsDefault);
         }
     }
 }

@@ -1,6 +1,6 @@
-using System.Collections.Generic;
+using System.Collections.Immutable;
 
-namespace ChatLake.Core.Parsing.Stubs;
+namespace ChatLake.Core.Parsing;
 
 public sealed class NullRawArtifactParser : IRawArtifactParser
 {
