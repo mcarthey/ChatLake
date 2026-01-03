@@ -14,6 +14,7 @@ builder.Services.AddDbContext<ChatLakeDbContext>(options =>
 
 builder.Services.AddScoped<IImportBatchService, ImportBatchService>();
 builder.Services.AddScoped<IRawArtifactService, RawArtifactService>();
+builder.Services.AddScoped<IImportOrchestrator, ImportOrchestrator>();
 
 builder.Services.AddControllersWithViews();
 
