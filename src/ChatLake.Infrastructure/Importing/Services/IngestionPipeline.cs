@@ -55,6 +55,7 @@ public sealed class IngestionPipeline
                 await _summaryBuilder.RebuildAsync(conversation.ConversationId);
             }
 
+            await _db.SaveChangesAsync();
         }
         catch (Exception ex)
         {
@@ -68,4 +69,5 @@ public sealed class IngestionPipeline
             await _db.SaveChangesAsync();
         }
     }
+
 }

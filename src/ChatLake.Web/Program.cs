@@ -6,6 +6,7 @@ using ChatLake.Infrastructure.Conversations.Services;
 using ChatLake.Core.Parsing;
 using ChatLake.Infrastructure.Parsing;
 using ChatLake.Infrastructure.Projects.Services;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,16 @@ builder.Services.AddScoped<IConversationQueryService, ConversationQueryService>(
 builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuilder>();
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddRazorPages(); 
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 1024L * 1024L * 1024L; // 1 GB
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 1024L * 1024L * 1024L; // 1 GB
+});
 
 var app = builder.Build();
 
@@ -43,6 +54,7 @@ else
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles(); 
 app.UseRouting();
 
 app.UseAuthorization();
@@ -50,5 +62,7 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.MapRazorPages();   
 
 app.Run();

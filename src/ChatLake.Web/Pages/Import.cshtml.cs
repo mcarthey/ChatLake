@@ -2,6 +2,8 @@ using ChatLake.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
+namespace ChatLake.Web.Pages;
+
 public class ImportModel : PageModel
 {
     private readonly IImportOrchestrator _orchestrator;
@@ -12,24 +14,33 @@ public class ImportModel : PageModel
     }
 
     [BindProperty]
-    public IFormFile Upload { get; set; } = null!;
+    public IFormFile? Upload { get; set; }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        using var reader = new StreamReader(Upload.OpenReadStream());
-        var json = await reader.ReadToEndAsync();
+        if (Upload == null || Upload.Length == 0)
+        {
+            ModelState.AddModelError(nameof(Upload), "Please select a file to upload.");
+            return Page();
+        }
+
+        string json;
+        using (var reader = new StreamReader(Upload.OpenReadStream()))
+        {
+            json = await reader.ReadToEndAsync();
+        }
 
         await _orchestrator.ImportJsonArtifactsAsync(
-            "ChatGPT",
-            "export",
-            User.Identity?.Name,
-            "UI Import",
-            new[]
+            sourceSystem: "ChatGPT",
+            sourceVersion: null,                 // you can set later if you detect it
+            importedBy: User.Identity?.Name,      // or null if anonymous
+            importLabel: "Web import",
+            artifacts: new[]
             {
                 new ImportJsonArtifactRequest(
-                    "ConversationsJson",
-                    Upload.FileName,
-                    json)
+                    ArtifactType: "ConversationsJson",
+                    ArtifactName: Upload.FileName,
+                    JsonPayload: json)
             });
 
         return RedirectToPage("/Conversations/Index");

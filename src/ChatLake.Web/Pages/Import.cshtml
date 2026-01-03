@@ -1,9 +1,15 @@
 @page
-@model ImportModel
+@model ChatLake.Web.Pages.ImportModel
 
 <h2>Import</h2>
 
 <form method="post" enctype="multipart/form-data">
+    <div asp-validation-summary="All" class="text-danger"></div>
+
+    @Html.AntiForgeryToken()
+
     <input type="file" asp-for="Upload" />
+    <span asp-validation-for="Upload"></span>
+
     <button type="submit">Import</button>
 </form>
