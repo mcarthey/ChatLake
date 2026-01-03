@@ -2,6 +2,7 @@ using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using ChatLake.Core.Services;
 using ChatLake.Infrastructure.Importing.Services;
+using ChatLake.Infrastructure.Conversations.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,7 @@ builder.Services.AddDbContext<ChatLakeDbContext>(options =>
 builder.Services.AddScoped<IImportBatchService, ImportBatchService>();
 builder.Services.AddScoped<IRawArtifactService, RawArtifactService>();
 builder.Services.AddScoped<IImportOrchestrator, ImportOrchestrator>();
+builder.Services.AddScoped<IConversationIngestionService, ConversationIngestionService>();
 
 builder.Services.AddControllersWithViews();
 
