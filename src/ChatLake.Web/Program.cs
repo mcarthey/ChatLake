@@ -13,6 +13,7 @@ builder.Services.AddDbContext<ChatLakeDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddScoped<IImportBatchService, ImportBatchService>();
+builder.Services.AddScoped<IRawArtifactService, RawArtifactService>();
 
 builder.Services.AddControllersWithViews();
 
