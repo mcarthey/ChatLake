@@ -13,16 +13,20 @@ public sealed class IngestionPipeline
     private readonly ChatLakeDbContext _db;
     private readonly IRawArtifactParserResolver _parserResolver;
     private readonly IConversationIngestionService _conversationIngestion;
+    private readonly IConversationSummaryBuilder _summaryBuilder;
 
     public IngestionPipeline(
         ChatLakeDbContext db,
         IRawArtifactParserResolver parserResolver,
-        IConversationIngestionService conversationIngestion)
+        IConversationIngestionService conversationIngestion,
+        IConversationSummaryBuilder summaryBuilder)
     {
         _db = db;
         _parserResolver = parserResolver;
         _conversationIngestion = conversationIngestion;
+        _summaryBuilder = summaryBuilder;
     }
+
 
     public async Task IngestRawArtifactAsync(long rawArtifactId)
     {
@@ -42,6 +46,15 @@ public sealed class IngestionPipeline
                 artifact.ImportBatchId,
                 artifact.RawArtifactId,
                 parsed);
+
+            foreach (var convo in parsed)
+            {
+                var conversation = await _db.Conversations
+                    .SingleAsync(c => c.ExternalConversationId == convo.ExternalConversationId);
+
+                await _summaryBuilder.RebuildAsync(conversation.ConversationId);
+            }
+
         }
         catch (Exception ex)
         {

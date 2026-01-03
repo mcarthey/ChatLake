@@ -5,6 +5,7 @@ using ChatLake.Infrastructure.Importing.Services;
 using ChatLake.Infrastructure.Conversations.Services;
 using ChatLake.Core.Parsing;
 using ChatLake.Infrastructure.Parsing;
+using ChatLake.Infrastructure.Projects.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,9 @@ builder.Services.AddScoped<IImportOrchestrator, ImportOrchestrator>();
 builder.Services.AddScoped<IConversationIngestionService, ConversationIngestionService>();
 builder.Services.AddScoped<IRawArtifactParserResolver, RawArtifactParserResolver>();
 builder.Services.AddScoped<IngestionPipeline>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<IConversationQueryService, ConversationQueryService>();
+builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuilder>();
 
 builder.Services.AddControllersWithViews();
 
