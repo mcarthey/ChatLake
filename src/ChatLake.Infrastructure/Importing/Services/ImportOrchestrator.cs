@@ -7,13 +7,16 @@ public class ImportOrchestrator : IImportOrchestrator
 {
     private readonly IImportBatchService _importBatchService;
     private readonly IRawArtifactService _rawArtifactService;
+    private readonly IngestionPipeline _ingestionPipeline;
 
     public ImportOrchestrator(
         IImportBatchService importBatchService,
-        IRawArtifactService rawArtifactService)
+        IRawArtifactService rawArtifactService,
+        IngestionPipeline ingestionPipeline)
     {
         _importBatchService = importBatchService;
         _rawArtifactService = rawArtifactService;
+        _ingestionPipeline = ingestionPipeline;
     }
 
     public async Task<long> ImportJsonArtifactsAsync(
@@ -36,11 +39,13 @@ public class ImportOrchestrator : IImportOrchestrator
         {
             foreach (var artifact in artifacts)
             {
-                await _rawArtifactService.AddJsonArtifactAsync(
+                var rawArtifactId = await _rawArtifactService.AddJsonArtifactAsync(
                     batchId,
                     artifact.ArtifactType,
                     artifact.ArtifactName,
                     artifact.JsonPayload);
+
+                await _ingestionPipeline.IngestRawArtifactAsync(rawArtifactId);
             }
 
             await _importBatchService.MarkCommittedAsync(
