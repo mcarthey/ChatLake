@@ -1,5 +1,7 @@
 using ChatLake.Infrastructure.Importing.Entities;
 using Microsoft.EntityFrameworkCore;
+using ChatLake.Infrastructure.Conversations.Entities;
+using ChatLake.Infrastructure.Persistence.Configurations;
 
 namespace ChatLake.Infrastructure.Persistence;
 
@@ -12,6 +14,10 @@ public class ChatLakeDbContext : DbContext
 
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<RawArtifact> RawArtifacts => Set<RawArtifact>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<ConversationArtifactMap> ConversationArtifactMaps => Set<ConversationArtifactMap>();
+    public DbSet<ParsingFailure> ParsingFailures => Set<ParsingFailure>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +25,11 @@ public class ChatLakeDbContext : DbContext
 
         ConfigureImportBatch(modelBuilder);
         ConfigureRawArtifact(modelBuilder);
+
+        modelBuilder.ApplyConfiguration(new ConversationConfiguration());
+        modelBuilder.ApplyConfiguration(new MessageConfiguration());
+        modelBuilder.ApplyConfiguration(new ConversationArtifactMapConfiguration());
+        modelBuilder.ApplyConfiguration(new ParsingFailureConfiguration());
     }
 
     private static void ConfigureImportBatch(ModelBuilder modelBuilder)
