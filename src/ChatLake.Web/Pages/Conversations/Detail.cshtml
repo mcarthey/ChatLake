@@ -1,3 +1,8 @@
+@page "{id:long}"
+@model ChatLake.Web.Pages.Conversations.DetailModel
+
+<h2>Conversation</h2>
+
 @foreach (var m in Model.Conversation.Messages)
 {
     <p><strong>@m.Role</strong>: @m.Content</p>

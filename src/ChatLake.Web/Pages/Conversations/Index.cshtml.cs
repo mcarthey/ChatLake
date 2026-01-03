@@ -1,6 +1,8 @@
 using ChatLake.Core.Services;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
+namespace ChatLake.Web.Pages.Conversations;
+
 public class IndexModel : PageModel
 {
     private readonly IConversationQueryService _queries;
