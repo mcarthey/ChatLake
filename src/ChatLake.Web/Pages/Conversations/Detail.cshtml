@@ -1,0 +1,4 @@
+@foreach (var m in Model.Conversation.Messages)
+{
+    <p><strong>@m.Role</strong>: @m.Content</p>
+}

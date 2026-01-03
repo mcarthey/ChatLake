@@ -1,0 +1,11 @@
+<ul>
+@foreach (var c in Model.Conversations)
+{
+    <li>
+        <a asp-page="Detail" asp-route-id="@c.ConversationId">
+            @c.PreviewText
+        </a>
+        <small>@c.MessageCount messages</small>
+    </li>
+}
+</ul>
