@@ -6,6 +6,7 @@ using ChatLake.Infrastructure.Conversations.Services;
 using ChatLake.Core.Parsing;
 using ChatLake.Infrastructure.Parsing;
 using ChatLake.Infrastructure.Projects.Services;
+using ChatLake.Infrastructure.Gold.Services;
 using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +28,7 @@ builder.Services.AddScoped<IngestionPipeline>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<IConversationQueryService, ConversationQueryService>();
 builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuilder>();
+builder.Services.AddScoped<IInferenceRunService, InferenceRunService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages(); 
