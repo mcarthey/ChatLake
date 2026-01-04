@@ -18,6 +18,61 @@ public class ImportOrchestrator : IImportOrchestrator
         _ingestionPipeline = ingestionPipeline;
     }
 
+    public async Task<long> ImportStreamArtifactAsync(
+        string sourceSystem,
+        string? sourceVersion,
+        string? importedBy,
+        string? importLabel,
+        string artifactType,
+        string artifactName,
+        Stream content,
+        CancellationToken ct = default)
+    {
+        var batchId = await _importBatchService.CreateAsync(
+            sourceSystem,
+            sourceVersion,
+            importedBy,
+            importLabel);
+
+        try
+        {
+            await _importBatchService.MarkProcessingAsync(batchId);
+
+            // Stream artifact directly to disk
+            var rawArtifactId = await _rawArtifactService.AddStreamArtifactAsync(
+                batchId,
+                artifactType,
+                artifactName,
+                content,
+                ct);
+
+            // Progress callback
+            async Task OnProgress(int processedCount, int? total)
+            {
+                await _importBatchService.UpdateProgressAsync(batchId, processedCount, total);
+            }
+
+            var result = await _ingestionPipeline.IngestRawArtifactAsync(
+                rawArtifactId,
+                OnProgress,
+                ct);
+
+            await _importBatchService.MarkCommittedAsync(batchId, 1, result.ConversationCount);
+
+            return batchId;
+        }
+        catch (OperationCanceledException)
+        {
+            await _importBatchService.MarkFailedAsync(batchId, "Import was cancelled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await _importBatchService.MarkFailedAsync(batchId, ex.Message);
+            throw;
+        }
+    }
+
     public async Task<long> ImportJsonArtifactsAsync(
         string sourceSystem,
         string? sourceVersion,

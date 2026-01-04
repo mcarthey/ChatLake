@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +13,19 @@ public interface IImportOrchestrator
         string? importedBy,
         string? importLabel,
         IReadOnlyCollection<ImportJsonArtifactRequest> artifacts,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Imports a single artifact from a stream (memory-efficient for large files).
+    /// </summary>
+    Task<long> ImportStreamArtifactAsync(
+        string sourceSystem,
+        string? sourceVersion,
+        string? importedBy,
+        string? importLabel,
+        string artifactType,
+        string artifactName,
+        Stream content,
         CancellationToken ct = default);
 }
 

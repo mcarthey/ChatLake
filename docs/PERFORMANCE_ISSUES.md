@@ -92,7 +92,7 @@ private static async Task<Stream> OpenArtifactStreamAsync(RawArtifact artifact)
 
 - [x] Pipeline streams from file when `StoredPath` is set
 - [x] Falls back to `RawJson` for backwards compatibility
-- [ ] **TODO:** Upload service should store large files to filesystem
+- [x] Upload service streams large files directly to filesystem
 
 ---
 
@@ -172,6 +172,40 @@ Change `IngestAsync` to return `Task<IReadOnlyCollection<long>>`.
 
 ---
 
+## Streaming File Upload ✅ NEW
+
+**Location:** Multiple files (see below)
+
+### Implementation
+
+Added streaming file upload to avoid loading entire file into memory:
+
+1. **IRawArtifactService.AddStreamArtifactAsync** - New method accepting Stream
+2. **RawArtifactService** - Streams directly to disk with SHA256 computed during copy
+3. **IImportOrchestrator.ImportStreamArtifactAsync** - New method for stream-based imports
+4. **Import.cshtml.cs** - Uses `Upload.OpenReadStream()` directly instead of `ReadToEndAsync()`
+
+### Memory Improvement
+
+For a 200MB file:
+- **Previous:** ~400MB+ (string + byte array + database)
+- **Now:** ~64KB buffer (streaming with 64KB chunks)
+
+### Configuration
+
+Storage path can be configured in `appsettings.json`:
+```json
+{
+  "ArtifactStorage": {
+    "BasePath": "C:\\data\\artifacts"
+  }
+}
+```
+
+Default: `{AppDirectory}/artifacts`
+
+---
+
 ## Progress Tracking Feature ✅ NEW
 
 **Location:** Multiple files (see below)
@@ -228,8 +262,9 @@ Added real-time progress tracking during imports:
 | 2 | File-based streaming | ✅ Fixed | High - reduces memory duplication |
 | 3 | Pipeline batching | ✅ Fixed | High - 15000 DB ops → 300 |
 | 4 | Progress tracking | ✅ Fixed | High - user visibility |
-| 5 | Single SaveChanges | ⏳ Pending | Medium - 2x round trips |
-| 6 | Return IDs | ⏳ Pending | Low - extra queries |
+| 5 | Streaming file upload | ✅ Fixed | High - 400MB → 64KB memory |
+| 6 | Single SaveChanges | ⏳ Pending | Medium - 2x round trips |
+| 7 | Return IDs | ⏳ Pending | Low - extra queries |
 
 ## Test Coverage
 
@@ -250,11 +285,10 @@ Test classes:
 
 ## Next Steps
 
-To complete large file support:
+Remaining optimizations (nice-to-have):
 
-1. **Upload Service:** Store large files (>10MB) to filesystem with `StoredPath`
-2. **Ingestion Optimization:** Single SaveChanges per batch (currently 2x per conversation)
-3. **Return IDs from IngestAsync:** Eliminate extra lookup query
+1. **Ingestion Optimization:** Single SaveChanges per batch (currently 2x per conversation)
+2. **Return IDs from IngestAsync:** Eliminate extra lookup query
 
 ---
 
@@ -266,8 +300,11 @@ To complete large file support:
 - `src/ChatLake.Infrastructure/Importing/Entities/ImportBatch.cs` ✅ Updated
 - `src/ChatLake.Core/Services/IImportBatchService.cs` ✅ Updated
 - `src/ChatLake.Infrastructure/Importing/Services/ImportBatchService.cs` ✅ Updated
+- `src/ChatLake.Core/Services/IRawArtifactService.cs` ✅ Updated (stream method)
+- `src/ChatLake.Infrastructure/Importing/Services/RawArtifactService.cs` ✅ Updated (stream to disk)
+- `src/ChatLake.Core/Services/IImportOrchestrator.cs` ✅ Updated (stream method)
 - `src/ChatLake.Web/Pages/Import.cshtml` ✅ Updated
-- `src/ChatLake.Web/Pages/Import.cshtml.cs` ✅ Updated
+- `src/ChatLake.Web/Pages/Import.cshtml.cs` ✅ Updated (uses stream)
 - `src/ChatLake.Web/Controllers/ImportApiController.cs` ✅ New
 - `src/ChatLake.Infrastructure/Conversations/Services/ConversationIngestionService.cs`
 - `src/ChatLake.Core/Services/IConversationIngestionService.cs`

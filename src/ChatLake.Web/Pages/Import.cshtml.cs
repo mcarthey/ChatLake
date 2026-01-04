@@ -50,25 +50,17 @@ public class ImportModel : PageModel
             return Page();
         }
 
-        string json;
-        using (var reader = new StreamReader(Upload.OpenReadStream()))
-        {
-            json = await reader.ReadToEndAsync(ct);
-        }
+        // Stream directly to disk - no string allocation for large files
+        await using var stream = Upload.OpenReadStream();
 
-        // Start the import - this now updates progress in the database
-        var batchId = await _orchestrator.ImportJsonArtifactsAsync(
+        var batchId = await _orchestrator.ImportStreamArtifactAsync(
             sourceSystem: "ChatGPT",
             sourceVersion: null,
             importedBy: User.Identity?.Name,
             importLabel: Upload.FileName,
-            artifacts: new[]
-            {
-                new ImportJsonArtifactRequest(
-                    ArtifactType: "ConversationsJson",
-                    ArtifactName: Upload.FileName,
-                    JsonPayload: json)
-            },
+            artifactType: "ConversationsJson",
+            artifactName: Upload.FileName,
+            content: stream,
             ct);
 
         // Redirect to conversations after completion
