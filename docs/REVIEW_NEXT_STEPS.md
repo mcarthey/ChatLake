@@ -1,4 +1,6 @@
-Below is a **clean review + concrete next steps**, based strictly on the three attached documents and the current state of the codebase. No speculation.
+Below is a **clean review + concrete next steps**, based strictly on the three attached documents and the current state of the codebase.
+
+**Last Updated:** 2026-01-04 (after 200MB import success)
 
 ---
 
@@ -56,98 +58,89 @@ This directly explains why the current “Import” UX felt broken: the backend 
 
 ## 2. Precise diagnosis of the current state
 
-### What is now **correct**
+### What is now **correct** ✅
 
 * Razor Pages binding issue is resolved
 * RawArtifact insert works
-* Parser has moved to `IAsyncEnumerable`
-* Memory blow-up from full JSON materialization is avoided
-* Tests were updated to async contract
-* NullRawArtifactParser is now a true no-op
+* Parser uses element-by-element streaming (Utf8JsonReader + ParseValue)
+* Pipeline processes one conversation at a time with batched commits
+* Progress tracking with ProcessedConversationCount, heartbeat, elapsed time
+* UI polls for status and shows real-time progress
+* Import cleanup service handles failed/stale imports
+* Conversation summaries show meaningful preview text (skip system/JSON messages)
+* **200MB file import successful**: 1,293 conversations, 41,879 messages
 
-### What is **still missing**
+### What is **still to do** (nice-to-have)
 
-1. **IngestionPipeline is not streaming**
+1. **Request thread optimization** (optional)
 
-   * It still *conceptually* assumes “parse all → ingest all”
-   * Even if the parser streams, the pipeline must also stream
+   * Import still runs on HTTP request thread
+   * Works fine but true background worker would be more robust
+   * Browser can disconnect but import continues
 
-2. **No unit of progress**
+2. **Single SaveChanges per batch**
 
-   * No batching
-   * No per-conversation commits
-   * No progress reporting
-   * No cancellation boundary surfaced to UI
+   * Currently 2 SaveChanges per conversation (line 50, 77)
+   * Could reduce to 1 per batch for ~50% fewer DB round trips
 
-3. **UI executes a long-running request synchronously**
+3. **Message fingerprint idempotency**
 
-   * Browser waits
-   * No status feedback
-   * No resilience
-
-None of these are bugs. They are **expected gaps at this milestone**.
-
----
-
-## 3. Required next steps (in strict priority order)
-
-### Step 1 — Make ingestion truly streaming (mandatory)
-
-Refactor `IngestionPipeline` so it:
-
-* consumes `await foreach (var convo in parser.ParseAsync(...))`
-* ingests **one conversation at a time**
-* commits per conversation or per small batch
-* does *not* hold the full parsed set in memory
-
-This directly satisfies the performance requirements in **MSSQL_SCHEMA §7**. 
+   * Deferred per DELIVERY_PLAN sequencing
+   * Not needed until reimport scenarios are common
 
 ---
 
-### Step 2 — Add an ImportExecution model (mandatory)
+## 3. Completed steps
 
-You need a lightweight execution tracker:
+### Step 1 — Make ingestion truly streaming ✅ DONE
 
-* ImportBatch already exists → extend its usage
-* Add:
+`IngestionPipeline` now:
 
-  * `ProcessedConversationCount`
-  * `LastHeartbeatUtc`
-  * `Status = Running | Completed | Failed`
-
-This is required by both DELIVERY_PLAN and PROJECT_REFERENCE.
-
----
-
-### Step 3 — Move import off the request thread (mandatory)
-
-The current `OnPostAsync` model is **not viable long-term**.
-
-Options (choose one, in this order of recommendation):
-
-1. BackgroundService / Channel-based queue
-2. Hosted service triggered by DB row
-3. Minimal Hangfire-style worker (later)
-
-UI should:
-
-* enqueue import
-* redirect immediately
-* poll status
-
-This is explicitly implied by the roadmap. 
+* Uses `Utf8JsonReader` + `JsonDocument.ParseValue` for element-by-element parsing
+* Ingests one conversation at a time
+* Commits every 50 conversations (configurable `BatchSize`)
+* Reports progress every 10 conversations (configurable `ProgressReportInterval`)
+* Memory: ~200MB for file + ~100KB per conversation DOM (was 800MB+ total)
 
 ---
 
-### Step 4 — Enforce fingerprint-based idempotency (next milestone)
+### Step 2 — Add an ImportExecution model ✅ DONE
 
-Once streaming is stable:
+`ImportBatch` entity extended with:
+
+* `ProcessedConversationCount`, `TotalConversationCount`
+* `StartedAtUtc`, `CompletedAtUtc`, `LastHeartbeatUtc`
+* `ErrorMessage`
+* Computed: `ElapsedTime`, `ProgressPercentage`, `IsComplete`
+
+API endpoint `GET /api/import/{batchId}/status` provides status for UI polling.
+
+---
+
+### Step 3 — Move import off the request thread ⚠️ DEFERRED
+
+Current implementation:
+
+* Runs on HTTP request thread with streaming + progress
+* Works well for single-user scenario (per PROJECT_REFERENCE)
+* UI polls status independently
+
+Future consideration:
+
+* BackgroundService if imports need to survive browser disconnect
+* Not blocking for current use case
+
+---
+
+### Step 4 — Enforce fingerprint-based idempotency 🔜 NEXT
+
+Once reimport scenarios become common:
 
 * implement `MessageFingerprintSha256` exactly as defined
 * add the unique constraint
 * add idempotency tests
 
-Do **not** do this before streaming is correct.
+Per DELIVERY_PLAN, this is sequenced *after* streaming stability.
 
 ---
 
@@ -164,19 +157,25 @@ The documents are very clear on this sequencing.
 
 ## 5. Bottom line
 
-You are **on the correct architectural path**.
+**The 200MB import milestone is complete.** ✅
 
-The failure mode you hit (huge file, CPU/memory usage, no visible progress) is *exactly* what happens when:
+Successfully imported:
+* 1,293 conversations
+* 41,879 messages
+* 1,293 summaries with meaningful preview text
 
-* parsing becomes async
-* but ingestion and UI are still synchronous
+Key architectural fixes applied:
+* Element-by-element JSON parsing (Utf8JsonReader)
+* Streaming file upload to disk (64KB buffer)
+* Batched commits (50 conversations per batch)
+* Progress reporting (every 10 conversations)
+* Import cleanup service for failed/stale batches
+* Improved conversation summaries (skip system/JSON)
 
-The fix is architectural, not corrective.
+**Next priorities (from DELIVERY_PLAN):**
 
-If you want, next we should:
+1. Message fingerprint idempotency (IMP-04)
+2. Import observation logging (IMP-06)
+3. ML/clustering features (ML-01 through ML-06)
 
-* refactor `IngestionPipeline` to a fully streaming version
-* then design the minimal background import runner
-* then wire progress into the UI
-
-Those are the next three commits.
+The foundation is now solid for building out higher-level features.
