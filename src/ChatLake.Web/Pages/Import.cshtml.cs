@@ -32,17 +32,18 @@ public class ImportModel : PageModel
 
         await _orchestrator.ImportJsonArtifactsAsync(
             sourceSystem: "ChatGPT",
-            sourceVersion: null,                 // you can set later if you detect it
-            importedBy: User.Identity?.Name,      // or null if anonymous
+            sourceVersion: null,
+            importedBy: User.Identity?.Name,
             importLabel: "Web import",
             artifacts: new[]
             {
-                new ImportJsonArtifactRequest(
-                    ArtifactType: "ConversationsJson",
-                    ArtifactName: Upload.FileName,
-                    JsonPayload: json)
+            new ImportJsonArtifactRequest(
+                ArtifactType: "ConversationsJson",
+                ArtifactName: Upload.FileName,
+                JsonPayload: json)
             });
 
         return RedirectToPage("/Conversations/Index");
     }
+
 }

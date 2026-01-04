@@ -2,6 +2,7 @@ using ChatLake.Core.Parsing;
 using ChatLake.Core.Services;
 using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace ChatLake.Infrastructure.Importing.Services;
 
@@ -40,19 +41,25 @@ public sealed class IngestionPipeline
 
         try
         {
-            var parsed = parser.Parse(artifact.RawJson);
+            await using var stream = new MemoryStream(
+                Encoding.UTF8.GetBytes(artifact.RawJson));
 
-            await _conversationIngestion.IngestAsync(
-                artifact.ImportBatchId,
-                artifact.RawArtifactId,
-                parsed);
-
-            foreach (var convo in parsed)
+            await foreach (var convo in parser.ParseAsync(stream))
             {
-                var conversation = await _db.Conversations
-                    .SingleAsync(c => c.ExternalConversationId == convo.ExternalConversationId);
+                await _conversationIngestion.IngestAsync(
+                    artifact.ImportBatchId,
+                    artifact.RawArtifactId,
+                    new[] { convo });
 
-                await _summaryBuilder.RebuildAsync(conversation.ConversationId);
+                var conversationId = await _db.Conversations
+                    .AsNoTracking()
+                    .Where(c => c.ExternalConversationId == convo.ExternalConversationId
+                        && c.SourceSystem == convo.SourceSystem)
+                    .Select(c => c.ConversationId)
+                    .SingleAsync();
+
+                await _summaryBuilder.RebuildAsync(conversationId);
+
             }
 
             await _db.SaveChangesAsync();
