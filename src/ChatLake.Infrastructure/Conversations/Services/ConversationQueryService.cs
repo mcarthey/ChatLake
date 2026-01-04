@@ -49,6 +49,10 @@ public sealed class ConversationQueryService : IConversationQueryService
 
     public async Task<ConversationDetailDto> GetConversationAsync(long conversationId)
     {
+        var summary = await _db.ConversationSummaries
+            .Where(s => s.ConversationId == conversationId)
+            .FirstOrDefaultAsync();
+
         var messages = await _db.Messages
             .Where(m => m.ConversationId == conversationId)
             .OrderBy(m => m.SequenceIndex)
@@ -59,6 +63,17 @@ public sealed class ConversationQueryService : IConversationQueryService
                 m.MessageTimestampUtc))
             .ToListAsync();
 
-        return new ConversationDetailDto(conversationId, messages);
+        // Use first 100 chars of preview as title
+        var title = summary?.PreviewText?.Length > 100
+            ? summary.PreviewText[..100] + "..."
+            : summary?.PreviewText;
+
+        return new ConversationDetailDto(
+            conversationId,
+            title,
+            summary?.MessageCount ?? messages.Count,
+            summary?.FirstMessageAtUtc,
+            summary?.LastMessageAtUtc,
+            messages);
     }
 }

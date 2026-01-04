@@ -1,9 +1,157 @@
 @page "{id:long}"
 @model ChatLake.Web.Pages.Conversations.DetailModel
 
-<h2>Conversation</h2>
+<style>
+    .conversation-header {
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #ddd;
+    }
+    .conversation-title {
+        font-size: 1.2em;
+        margin-bottom: 10px;
+        color: #333;
+    }
+    .conversation-meta {
+        font-size: 0.85em;
+        color: #666;
+    }
+    .conversation-meta span {
+        margin-right: 20px;
+    }
+    .back-link {
+        margin-bottom: 15px;
+        display: block;
+    }
 
-@foreach (var m in Model.Conversation.Messages)
-{
-    <p><strong>@m.Role</strong>: @m.Content</p>
-}
+    .messages-container {
+        max-width: 900px;
+    }
+
+    .message {
+        margin-bottom: 20px;
+        padding: 15px;
+        border-radius: 8px;
+        position: relative;
+    }
+    .message-user {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+    }
+    .message-assistant {
+        background-color: #f5f5f5;
+        border-left: 4px solid #4caf50;
+    }
+    .message-system {
+        background-color: #fff3e0;
+        border-left: 4px solid #ff9800;
+        font-size: 0.9em;
+    }
+    .message-tool {
+        background-color: #fce4ec;
+        border-left: 4px solid #e91e63;
+        font-size: 0.9em;
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 0.85em;
+    }
+    .message-role {
+        font-weight: bold;
+        text-transform: capitalize;
+    }
+    .message-role-user { color: #1565c0; }
+    .message-role-assistant { color: #2e7d32; }
+    .message-role-system { color: #e65100; }
+    .message-role-tool { color: #c2185b; }
+
+    .message-timestamp {
+        color: #999;
+    }
+
+    .message-content {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        line-height: 1.6;
+    }
+    .message-content code {
+        background-color: rgba(0,0,0,0.05);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Consolas', 'Monaco', monospace;
+    }
+    .message-content pre {
+        background-color: #282c34;
+        color: #abb2bf;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        margin: 10px 0;
+    }
+
+    .message-index {
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        font-size: 0.7em;
+        color: #bbb;
+    }
+</style>
+
+<a asp-page="Index" class="back-link">&larr; Back to Conversations</a>
+
+<div class="conversation-header">
+    <div class="conversation-title">@Model.Conversation.Title</div>
+    <div class="conversation-meta">
+        <span><strong>Messages:</strong> @Model.Conversation.MessageCount</span>
+        @if (Model.Conversation.FirstMessageAtUtc.HasValue)
+        {
+            <span><strong>Started:</strong> @Model.Conversation.FirstMessageAtUtc.Value.ToString("yyyy-MM-dd HH:mm")</span>
+        }
+        @if (Model.Conversation.LastMessageAtUtc.HasValue)
+        {
+            <span><strong>Last:</strong> @Model.Conversation.LastMessageAtUtc.Value.ToString("yyyy-MM-dd HH:mm")</span>
+        }
+    </div>
+</div>
+
+<div class="messages-container">
+    @foreach (var m in Model.Conversation.Messages)
+    {
+        var roleClass = m.Role.ToLowerInvariant() switch
+        {
+            "user" => "message-user",
+            "assistant" => "message-assistant",
+            "system" => "message-system",
+            "tool" => "message-tool",
+            _ => "message-user"
+        };
+        var roleLabelClass = m.Role.ToLowerInvariant() switch
+        {
+            "user" => "message-role-user",
+            "assistant" => "message-role-assistant",
+            "system" => "message-role-system",
+            "tool" => "message-role-tool",
+            _ => "message-role-user"
+        };
+
+        <div class="message @roleClass">
+            <span class="message-index">#@m.SequenceIndex</span>
+            <div class="message-header">
+                <span class="message-role @roleLabelClass">@m.Role</span>
+                @if (m.MessageTimestampUtc.HasValue)
+                {
+                    <span class="message-timestamp">@m.MessageTimestampUtc.Value.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                }
+            </div>
+            <div class="message-content">@m.Content</div>
+        </div>
+    }
+</div>
+
+<div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd;">
+    <a asp-page="Index">&larr; Back to Conversations</a>
+</div>

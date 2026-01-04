@@ -23,4 +23,8 @@ public sealed record ConversationMessageDto(
 
 public sealed record ConversationDetailDto(
     long ConversationId,
+    string? Title,
+    int MessageCount,
+    DateTime? FirstMessageAtUtc,
+    DateTime? LastMessageAtUtc,
     IReadOnlyList<ConversationMessageDto> Messages);
