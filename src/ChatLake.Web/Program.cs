@@ -20,6 +20,7 @@ builder.Services.AddDbContext<ChatLakeDbContext>(options =>
 builder.Services.AddScoped<IImportBatchService, ImportBatchService>();
 builder.Services.AddScoped<IRawArtifactService, RawArtifactService>();
 builder.Services.AddScoped<IImportOrchestrator, ImportOrchestrator>();
+builder.Services.AddScoped<IImportCleanupService, ImportCleanupService>();
 builder.Services.AddScoped<IConversationIngestionService, ConversationIngestionService>();
 builder.Services.AddScoped<IRawArtifactParserResolver, RawArtifactParserResolver>();
 builder.Services.AddScoped<IngestionPipeline>();

@@ -114,20 +114,28 @@ else
     <h3>Recent Imports</h3>
     @if (Model.RecentImports?.Any() == true)
     {
+        <p style="margin-bottom: 10px;">
+            <button type="button" onclick="cleanupAllFailed()" style="background-color: #ff9800; color: white; border: none; padding: 8px 16px; cursor: pointer;">
+                Cleanup All Failed
+            </button>
+        </p>
         <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background-color: #f0f0f0;">
                     <th style="padding: 8px; text-align: left;">Date</th>
+                    <th style="padding: 8px; text-align: left;">Label</th>
                     <th style="padding: 8px; text-align: left;">Status</th>
                     <th style="padding: 8px; text-align: right;">Conversations</th>
                     <th style="padding: 8px; text-align: right;">Duration</th>
+                    <th style="padding: 8px; text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var import in Model.RecentImports)
                 {
-                    <tr style="border-bottom: 1px solid #ddd;">
+                    <tr style="border-bottom: 1px solid #ddd;" id="row-@import.ImportBatchId">
                         <td style="padding: 8px;">@import.ImportedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td style="padding: 8px;">@(import.ImportLabel ?? "-")</td>
                         <td style="padding: 8px;">
                             @if (import.Status == "Committed")
                             {
@@ -135,7 +143,7 @@ else
                             }
                             else if (import.Status == "Failed")
                             {
-                                <span style="color: red;">@import.Status</span>
+                                <span style="color: red;" title="@import.ErrorMessage">@import.Status</span>
                             }
                             else
                             {
@@ -149,10 +157,56 @@ else
                                 @import.ElapsedTime.Value.ToString(@"mm\:ss")
                             }
                         </td>
+                        <td style="padding: 8px; text-align: center;">
+                            @if (import.Status == "Failed" || import.Status == "Staged")
+                            {
+                                <button type="button" onclick="cleanupBatch(@import.ImportBatchId)"
+                                    style="background-color: #f44336; color: white; border: none; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                                    Delete
+                                </button>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
+
+        <script>
+            async function cleanupBatch(batchId) {
+                if (!confirm('Delete this failed import and all related data?')) return;
+
+                try {
+                    const response = await fetch('/api/import/' + batchId, { method: 'DELETE' });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        alert('Deleted: ' + data.conversationsDeleted + ' conversations, ' +
+                              data.artifactsDeleted + ' artifacts, ' + data.filesDeleted + ' files');
+                        document.getElementById('row-' + batchId)?.remove();
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            async function cleanupAllFailed() {
+                if (!confirm('Delete ALL failed and stale imports?')) return;
+
+                try {
+                    const response = await fetch('/api/import/cleanup-failed', { method: 'POST' });
+                    const data = await response.json();
+
+                    alert('Cleaned up ' + data.batchesDeleted + ' batches, ' +
+                          data.conversationsDeleted + ' conversations, ' +
+                          data.artifactsDeleted + ' artifacts, ' + data.filesDeleted + ' files');
+                    location.reload();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+        </script>
     }
     else
     {

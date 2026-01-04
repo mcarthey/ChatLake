@@ -8,10 +8,14 @@ namespace ChatLake.Web.Controllers;
 public class ImportApiController : ControllerBase
 {
     private readonly IImportBatchService _importBatchService;
+    private readonly IImportCleanupService _cleanupService;
 
-    public ImportApiController(IImportBatchService importBatchService)
+    public ImportApiController(
+        IImportBatchService importBatchService,
+        IImportCleanupService cleanupService)
     {
         _importBatchService = importBatchService;
+        _cleanupService = cleanupService;
     }
 
     [HttpGet("{batchId:long}/status")]
@@ -34,6 +38,39 @@ public class ImportApiController : ControllerBase
             progressPercentage = status.ProgressPercentage,
             errorMessage = status.ErrorMessage,
             isComplete = status.IsComplete
+        });
+    }
+
+    [HttpDelete("{batchId:long}")]
+    public async Task<IActionResult> CleanupBatch(long batchId, CancellationToken ct)
+    {
+        var result = await _cleanupService.CleanupBatchAsync(batchId, ct);
+
+        if (result.ErrorMessage != null)
+        {
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(new
+        {
+            batchesDeleted = result.BatchesDeleted,
+            artifactsDeleted = result.ArtifactsDeleted,
+            conversationsDeleted = result.ConversationsDeleted,
+            filesDeleted = result.FilesDeleted
+        });
+    }
+
+    [HttpPost("cleanup-failed")]
+    public async Task<IActionResult> CleanupAllFailed(CancellationToken ct)
+    {
+        var result = await _cleanupService.CleanupAllFailedAsync(ct);
+
+        return Ok(new
+        {
+            batchesDeleted = result.BatchesDeleted,
+            artifactsDeleted = result.ArtifactsDeleted,
+            conversationsDeleted = result.ConversationsDeleted,
+            filesDeleted = result.FilesDeleted
         });
     }
 }
