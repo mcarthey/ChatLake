@@ -93,8 +93,67 @@ public sealed class ProjectService : IProjectService
                 p.Name,
                 p.IsActive,
                 p.IsSystemGenerated,
-                p.CreatedAtUtc))
+                p.CreatedAtUtc,
+                _db.ProjectConversations.Count(pc => pc.ProjectId == p.ProjectId && pc.IsCurrent)))
             .ToListAsync();
+    }
+
+    public async Task<ProjectDetailDto?> GetByIdAsync(long projectId)
+    {
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectId == projectId);
+        if (project is null)
+            return null;
+
+        var conversationIds = await _db.ProjectConversations
+            .Where(pc => pc.ProjectId == projectId && pc.IsCurrent)
+            .Select(pc => pc.ConversationId)
+            .ToListAsync();
+
+        var summaries = await _db.ConversationSummaries
+            .Where(cs => conversationIds.Contains(cs.ConversationId))
+            .ToListAsync();
+
+        return new ProjectDetailDto(
+            project.ProjectId,
+            project.ProjectKey,
+            project.Name,
+            project.Description,
+            project.IsActive,
+            project.IsSystemGenerated,
+            project.CreatedAtUtc,
+            project.CreatedBy,
+            conversationIds.Count,
+            summaries.Any() ? summaries.Min(s => s.FirstMessageAtUtc) : null,
+            summaries.Any() ? summaries.Max(s => s.LastMessageAtUtc) : null);
+    }
+
+    public async Task<IReadOnlyList<ProjectConversationDto>> GetProjectConversationsAsync(long projectId)
+    {
+        var assignments = await _db.ProjectConversations
+            .Where(pc => pc.ProjectId == projectId && pc.IsCurrent)
+            .ToListAsync();
+
+        var conversationIds = assignments.Select(a => a.ConversationId).ToList();
+
+        var summaries = await _db.ConversationSummaries
+            .Where(cs => conversationIds.Contains(cs.ConversationId))
+            .ToDictionaryAsync(cs => cs.ConversationId);
+
+        return assignments
+            .Select(pc =>
+            {
+                var summary = summaries.GetValueOrDefault(pc.ConversationId);
+                return new ProjectConversationDto(
+                    pc.ConversationId,
+                    summary?.PreviewText,
+                    summary?.FirstMessageAtUtc,
+                    summary?.LastMessageAtUtc,
+                    summary?.MessageCount ?? 0,
+                    pc.AssignedAtUtc,
+                    pc.AssignedBy);
+            })
+            .OrderByDescending(c => c.LastMessageAtUtc)
+            .ToList();
     }
 
     private static string GenerateProjectKey(string name)

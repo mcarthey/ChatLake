@@ -1,0 +1,84 @@
+@page "{id:long}"
+@model ChatLake.Web.Pages.Projects.DetailModel
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-page="/Projects/Index">Projects</a></li>
+        <li class="breadcrumb-item active" aria-current="page">@Model.Project!.Name</li>
+    </ol>
+</nav>
+
+<h2>@Model.Project!.Name</h2>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <dl>
+            <dt>Project Key</dt>
+            <dd><code>@Model.Project.ProjectKey</code></dd>
+
+            <dt>Description</dt>
+            <dd>@(Model.Project.Description ?? "<em>No description</em>")</dd>
+
+            <dt>Status</dt>
+            <dd>@(Model.Project.IsActive ? "Active" : "Archived")</dd>
+
+            <dt>Created</dt>
+            <dd>@Model.Project.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") @(Model.Project.IsSystemGenerated ? "(System)" : $"by {Model.Project.CreatedBy ?? "User"}")</dd>
+        </dl>
+    </div>
+    <div class="col-md-6">
+        <dl>
+            <dt>Conversations</dt>
+            <dd>@Model.Project.ConversationCount</dd>
+
+            @if (Model.Project.FirstConversationAtUtc.HasValue)
+            {
+                <dt>First Conversation</dt>
+                <dd>@Model.Project.FirstConversationAtUtc.Value.ToString("yyyy-MM-dd HH:mm")</dd>
+            }
+
+            @if (Model.Project.LastConversationAtUtc.HasValue)
+            {
+                <dt>Last Conversation</dt>
+                <dd>@Model.Project.LastConversationAtUtc.Value.ToString("yyyy-MM-dd HH:mm")</dd>
+            }
+        </dl>
+    </div>
+</div>
+
+<h3>Conversations</h3>
+
+@if (!Model.Conversations.Any())
+{
+    <p><em>No conversations assigned to this project.</em></p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Messages</th>
+                <th>First Message</th>
+                <th>Last Message</th>
+                <th>Assigned</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var conv in Model.Conversations)
+        {
+            <tr>
+                <td>
+                    <a asp-page="/Conversations/Detail" asp-route-id="@conv.ConversationId">
+                        @(conv.Title ?? $"Conversation {conv.ConversationId}")
+                    </a>
+                </td>
+                <td>@conv.MessageCount</td>
+                <td>@conv.FirstMessageAtUtc?.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@conv.LastMessageAtUtc?.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@conv.AssignedAtUtc.ToString("yyyy-MM-dd") by @conv.AssignedBy</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

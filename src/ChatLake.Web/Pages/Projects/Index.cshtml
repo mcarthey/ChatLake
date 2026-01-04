@@ -14,11 +14,12 @@
 }
 else
 {
-    <table>
+    <table class="table table-striped">
         <thead>
             <tr>
                 <th>Name</th>
                 <th>Key</th>
+                <th>Conversations</th>
                 <th>Status</th>
                 <th>Created</th>
             </tr>
@@ -27,8 +28,9 @@ else
         @foreach (var project in Model.Projects)
         {
             <tr>
-                <td>@project.Name</td>
+                <td><a asp-page="/Projects/Detail" asp-route-id="@project.ProjectId">@project.Name</a></td>
                 <td><code>@project.ProjectKey</code></td>
+                <td>@project.ConversationCount</td>
                 <td>@(project.IsActive ? "Active" : "Archived")</td>
                 <td>@project.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
             </tr>
