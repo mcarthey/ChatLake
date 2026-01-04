@@ -1,0 +1,104 @@
+@page
+@model ChatLake.Web.Pages.Projects.SuggestionsModel
+
+<h2>Project Suggestions</h2>
+
+<p>
+    <a asp-page="/Projects/Index">Back to Projects</a>
+</p>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div style="background: #d4edda; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+        @Model.Message
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div style="background: #f8d7da; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+        @Model.ErrorMessage
+    </div>
+}
+
+<div style="margin-bottom: 20px;">
+    <form method="post" asp-page-handler="RunClustering" style="display: inline;">
+        <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Run Clustering
+        </button>
+    </form>
+    <span style="margin-left: 10px; color: #666;">
+        Analyze conversations and generate project suggestions
+    </span>
+</div>
+
+<h3>Pending Suggestions (@Model.PendingSuggestions.Count)</h3>
+
+@if (!Model.PendingSuggestions.Any())
+{
+    <p><em>No pending suggestions. Run clustering to analyze conversations.</em></p>
+}
+else
+{
+    <div style="display: flex; flex-direction: column; gap: 15px;">
+        @foreach (var suggestion in Model.PendingSuggestions)
+        {
+            <div style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #fafafa;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h4 style="margin: 0 0 5px 0;">@suggestion.SuggestedName</h4>
+                        <p style="margin: 0 0 5px 0; color: #666; font-size: 0.9em;">
+                            <code>@suggestion.SuggestedProjectKey</code>
+                        </p>
+                        <p style="margin: 0; color: #666;">
+                            @suggestion.Summary
+                        </p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 1.2em; font-weight: bold; color: @(suggestion.Confidence >= 0.7m ? "#28a745" : suggestion.Confidence >= 0.4m ? "#ffc107" : "#dc3545");">
+                            @(suggestion.Confidence * 100):F0% confidence
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <form method="post" asp-page-handler="Accept" style="display: inline;">
+                        <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                        <button type="submit" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Accept
+                        </button>
+                    </form>
+
+                    <form method="post" asp-page-handler="Reject" style="display: inline;">
+                        <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                        <button type="submit" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Reject
+                        </button>
+                    </form>
+
+                    @if (Model.ExistingProjects.Any())
+                    {
+                        <form method="post" asp-page-handler="Merge" style="display: inline-flex; gap: 5px; align-items: center;">
+                            <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                            <select name="targetProjectId" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                @foreach (var project in Model.ExistingProjects)
+                                {
+                                    <option value="@project.ProjectId">@project.Name</option>
+                                }
+                            </select>
+                            <button type="submit" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Merge Into
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    button:hover {
+        opacity: 0.9;
+    }
+</style>

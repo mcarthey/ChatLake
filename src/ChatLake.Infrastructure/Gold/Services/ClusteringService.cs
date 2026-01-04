@@ -197,7 +197,8 @@ public sealed class ClusteringService : IClusteringService
                 SuggestedName = suggestedName,
                 Summary = $"Cluster of {cluster.Count} related conversations",
                 Confidence = cluster.Confidence,
-                Status = cluster.Confidence >= autoAcceptThreshold ? "Accepted" : "Pending"
+                Status = cluster.Confidence >= autoAcceptThreshold ? "Accepted" : "Pending",
+                ConversationIdsJson = JsonSerializer.Serialize(cluster.ConversationIds)
             };
 
             _db.ProjectSuggestions.Add(suggestion);

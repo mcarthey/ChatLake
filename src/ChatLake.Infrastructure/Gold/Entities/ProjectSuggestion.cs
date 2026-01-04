@@ -33,6 +33,11 @@ public class ProjectSuggestion
     public string Status { get; set; } = "Pending";
 
     /// <summary>
+    /// JSON array of conversation IDs in this cluster.
+    /// </summary>
+    public string ConversationIdsJson { get; set; } = "[]";
+
+    /// <summary>
     /// If accepted/merged, the resulting Project.
     /// </summary>
     public long? ResolvedProjectId { get; set; }

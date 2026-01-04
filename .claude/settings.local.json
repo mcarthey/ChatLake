@@ -9,7 +9,8 @@
       "Bash(ls:*)",
       "Bash(pwd:*)",
       "Bash(mkdir:*)",
-      "Bash(rm -f:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(rm:*)",
       "Bash(wc:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
@@ -19,8 +20,7 @@
       "Bash(echo:*)",
       "Bash(curl:*)",
       "Bash(timeout:*)",
-      "WebSearch",
-      "Bash(git -C \"E:/Documents/dev/ChatLake\" add -A)"
+      "WebSearch"
     ]
   }
 }
