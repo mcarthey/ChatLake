@@ -1,5 +1,6 @@
 using ChatLake.Core.Parsing;
 using ChatLake.Core.Services;
+using ChatLake.Infrastructure.Importing.Entities;
 using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
@@ -28,7 +29,6 @@ public sealed class IngestionPipeline
         _summaryBuilder = summaryBuilder;
     }
 
-
     public async Task IngestRawArtifactAsync(long rawArtifactId)
     {
         var artifact = await _db.RawArtifacts
@@ -41,8 +41,7 @@ public sealed class IngestionPipeline
 
         try
         {
-            await using var stream = new MemoryStream(
-                Encoding.UTF8.GetBytes(artifact.RawJson));
+            await using var stream = await OpenArtifactStreamAsync(artifact);
 
             await foreach (var convo in parser.ParseAsync(stream))
             {
@@ -59,7 +58,6 @@ public sealed class IngestionPipeline
                     .SingleAsync();
 
                 await _summaryBuilder.RebuildAsync(conversationId);
-
             }
 
             await _db.SaveChangesAsync();
@@ -77,4 +75,34 @@ public sealed class IngestionPipeline
         }
     }
 
+    /// <summary>
+    /// Opens a stream to the artifact content.
+    /// Prefers filesystem storage (StoredPath) for large files to avoid memory duplication.
+    /// Falls back to RawJson for backwards compatibility.
+    /// </summary>
+    private static async Task<Stream> OpenArtifactStreamAsync(RawArtifact artifact)
+    {
+        // Prefer filesystem storage for large artifacts
+        if (!string.IsNullOrEmpty(artifact.StoredPath) && File.Exists(artifact.StoredPath))
+        {
+            return new FileStream(
+                artifact.StoredPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 64 * 1024,
+                useAsync: true);
+        }
+
+        // Fall back to RawJson (legacy or small artifacts)
+        if (!string.IsNullOrEmpty(artifact.RawJson))
+        {
+            // Convert to bytes - this creates one copy, but the parser will read from the stream
+            var bytes = Encoding.UTF8.GetBytes(artifact.RawJson);
+            return new MemoryStream(bytes);
+        }
+
+        throw new InvalidOperationException(
+            $"Artifact {artifact.RawArtifactId} has neither StoredPath nor RawJson content.");
+    }
 }

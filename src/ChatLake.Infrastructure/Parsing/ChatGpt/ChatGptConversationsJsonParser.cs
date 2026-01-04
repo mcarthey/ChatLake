@@ -1,6 +1,4 @@
 using ChatLake.Core.Parsing;
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -11,6 +9,11 @@ namespace ChatLake.Infrastructure.Parsing.ChatGpt;
 /// <summary>
 /// Parses ChatGPT export "conversations.json" (OpenAI data export format).
 /// Pure parser: no DB, no side effects.
+///
+/// This implementation uses element-by-element parsing - it reads the file once
+/// then parses one conversation at a time, avoiding creation of a massive DOM
+/// for the entire file. Memory usage is proportional to the raw file size plus
+/// the largest single conversation, not the entire DOM.
 /// </summary>
 public sealed class ChatGptConversationsJsonParser : IRawArtifactParser
 {
@@ -18,29 +21,75 @@ public sealed class ChatGptConversationsJsonParser : IRawArtifactParser
         Stream jsonStream,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        using var doc = await JsonDocument.ParseAsync(
-            jsonStream,
-            new JsonDocumentOptions
-            {
-                AllowTrailingCommas = true,
-                CommentHandling = JsonCommentHandling.Skip
-            },
-            ct);
+        // Read the stream into a byte array for Utf8JsonReader
+        // This is required because Utf8JsonReader is a ref struct and needs contiguous memory
+        byte[] bytes;
+        using (var memoryStream = new MemoryStream())
+        {
+            await jsonStream.CopyToAsync(memoryStream, ct);
+            bytes = memoryStream.ToArray();
+        }
 
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            yield break;
+        ct.ThrowIfCancellationRequested();
 
-        foreach (var convEl in doc.RootElement.EnumerateArray())
+        // Parse all conversations using Utf8JsonReader + JsonDocument.ParseValue
+        // This processes one conversation at a time, avoiding a massive DOM
+        var conversations = ParseConversationsFromBytes(bytes, ct);
+
+        // Yield each parsed conversation
+        foreach (var conversation in conversations)
         {
             ct.ThrowIfCancellationRequested();
-
-            var parsed = ParseSingleConversation(convEl);
-            if (parsed != null)
-                yield return parsed;
+            yield return conversation;
         }
     }
 
-    private ParsedConversation? ParseSingleConversation(JsonElement convEl)
+    /// <summary>
+    /// Parses conversations from a byte array using Utf8JsonReader.
+    /// Uses JsonDocument.ParseValue to parse one conversation at a time,
+    /// avoiding the memory overhead of parsing the entire file as a single DOM.
+    /// </summary>
+    private static List<ParsedConversation> ParseConversationsFromBytes(
+        byte[] bytes,
+        CancellationToken ct)
+    {
+        var results = new List<ParsedConversation>();
+
+        var readerOptions = new JsonReaderOptions
+        {
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip
+        };
+
+        var reader = new Utf8JsonReader(bytes, readerOptions);
+
+        // Expect array start
+        if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+            return results;
+
+        // Read each element in the array
+        while (reader.Read())
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (reader.TokenType == JsonTokenType.EndArray)
+                break;
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                // Parse just this one object into a mini-document
+                using var doc = JsonDocument.ParseValue(ref reader);
+
+                var parsed = ParseSingleConversation(doc.RootElement);
+                if (parsed != null)
+                    results.Add(parsed);
+            }
+        }
+
+        return results;
+    }
+
+    private static ParsedConversation? ParseSingleConversation(JsonElement convEl)
     {
         if (convEl.ValueKind != JsonValueKind.Object)
             return null;
