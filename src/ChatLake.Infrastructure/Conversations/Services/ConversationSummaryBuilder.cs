@@ -1,4 +1,5 @@
 using ChatLake.Core.Services;
+using ChatLake.Infrastructure.Conversations.Entities;
 using ChatLake.Infrastructure.Persistence;
 using ChatLake.Infrastructure.Projects.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -42,9 +43,7 @@ public sealed class ConversationSummaryBuilder : IConversationSummaryBuilder
         summary.ParticipantSet = string.Join(
             ",",
             messages.Select(m => m.Role).Distinct().OrderBy(r => r));
-        summary.PreviewText = messages.First().Content.Length > 500
-            ? messages.First().Content[..500]
-            : messages.First().Content;
+        summary.PreviewText = GetPreviewText(messages);
         summary.UpdatedAtUtc = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -58,5 +57,31 @@ public sealed class ConversationSummaryBuilder : IConversationSummaryBuilder
 
         foreach (var id in conversationIds)
             await RebuildAsync(id);
+    }
+
+    private static string GetPreviewText(List<Message> messages)
+    {
+        // Find first non-system message that isn't JSON
+        var candidate = messages
+            .Where(m => !string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
+            .Where(m => !string.IsNullOrWhiteSpace(m.Content))
+            .Where(m => !m.Content.TrimStart().StartsWith('{'))
+            .FirstOrDefault();
+
+        if (candidate == null)
+        {
+            // Fallback: use any non-empty message
+            candidate = messages.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Content));
+            if (candidate == null)
+                return "(no content)";
+        }
+
+        var text = candidate.Content.Trim();
+
+        // Truncate to 200 chars with ellipsis
+        if (text.Length > 200)
+            text = text[..197] + "...";
+
+        return text;
     }
 }

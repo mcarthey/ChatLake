@@ -9,13 +9,16 @@ public class ImportApiController : ControllerBase
 {
     private readonly IImportBatchService _importBatchService;
     private readonly IImportCleanupService _cleanupService;
+    private readonly IConversationSummaryBuilder _summaryBuilder;
 
     public ImportApiController(
         IImportBatchService importBatchService,
-        IImportCleanupService cleanupService)
+        IImportCleanupService cleanupService,
+        IConversationSummaryBuilder summaryBuilder)
     {
         _importBatchService = importBatchService;
         _cleanupService = cleanupService;
+        _summaryBuilder = summaryBuilder;
     }
 
     [HttpGet("{batchId:long}/status")]
@@ -72,5 +75,12 @@ public class ImportApiController : ControllerBase
             conversationsDeleted = result.ConversationsDeleted,
             filesDeleted = result.FilesDeleted
         });
+    }
+
+    [HttpPost("rebuild-summaries")]
+    public async Task<IActionResult> RebuildSummaries()
+    {
+        await _summaryBuilder.RebuildAllAsync();
+        return Ok(new { message = "Summaries rebuilt successfully" });
     }
 }
