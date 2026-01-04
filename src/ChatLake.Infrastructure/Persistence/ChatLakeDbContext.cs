@@ -2,7 +2,9 @@ using ChatLake.Infrastructure.Importing.Entities;
 using Microsoft.EntityFrameworkCore;
 using ChatLake.Infrastructure.Conversations.Entities;
 using ChatLake.Infrastructure.Persistence.Configurations;
+using ChatLake.Infrastructure.Persistence.Configurations.Gold;
 using ChatLake.Infrastructure.Projects.Entities;
+using ChatLake.Infrastructure.Gold.Entities;
 
 namespace ChatLake.Infrastructure.Persistence;
 
@@ -13,15 +15,32 @@ public class ChatLakeDbContext : DbContext
       {
       }
 
+      // Bronze tier
       public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
       public DbSet<RawArtifact> RawArtifacts => Set<RawArtifact>();
+
+      // Silver tier
       public DbSet<Conversation> Conversations => Set<Conversation>();
       public DbSet<Message> Messages => Set<Message>();
       public DbSet<ConversationArtifactMap> ConversationArtifactMaps => Set<ConversationArtifactMap>();
       public DbSet<ParsingFailure> ParsingFailures => Set<ParsingFailure>();
+      public DbSet<ConversationSummary> ConversationSummaries => Set<ConversationSummary>();
+
+      // Gold tier - Projects
       public DbSet<Project> Projects => Set<Project>();
       public DbSet<ProjectConversation> ProjectConversations => Set<ProjectConversation>();
-      public DbSet<ConversationSummary> ConversationSummaries => Set<ConversationSummary>();
+      public DbSet<ProjectSuggestion> ProjectSuggestions => Set<ProjectSuggestion>();
+      public DbSet<ProjectDriftMetric> ProjectDriftMetrics => Set<ProjectDriftMetric>();
+
+      // Gold tier - ML/Inference
+      public DbSet<InferenceRun> InferenceRuns => Set<InferenceRun>();
+      public DbSet<Topic> Topics => Set<Topic>();
+      public DbSet<ConversationTopic> ConversationTopics => Set<ConversationTopic>();
+      public DbSet<ConversationSimilarity> ConversationSimilarities => Set<ConversationSimilarity>();
+      public DbSet<BlogTopicSuggestion> BlogTopicSuggestions => Set<BlogTopicSuggestion>();
+
+      // Overrides
+      public DbSet<UserOverride> UserOverrides => Set<UserOverride>();
 
       protected override void OnModelCreating(ModelBuilder modelBuilder)
       {
@@ -39,6 +58,15 @@ public class ChatLakeDbContext : DbContext
             modelBuilder.ApplyConfiguration(new ProjectConversationConfiguration());
             modelBuilder.ApplyConfiguration(new ConversationSummaryConfiguration());
 
+            // Gold tier configurations
+            modelBuilder.ApplyConfiguration(new InferenceRunConfiguration());
+            modelBuilder.ApplyConfiguration(new ProjectSuggestionConfiguration());
+            modelBuilder.ApplyConfiguration(new TopicConfiguration());
+            modelBuilder.ApplyConfiguration(new ConversationTopicConfiguration());
+            modelBuilder.ApplyConfiguration(new ProjectDriftMetricConfiguration());
+            modelBuilder.ApplyConfiguration(new ConversationSimilarityConfiguration());
+            modelBuilder.ApplyConfiguration(new BlogTopicSuggestionConfiguration());
+            modelBuilder.ApplyConfiguration(new UserOverrideConfiguration());
       }
 
       private static void ConfigureImportBatch(ModelBuilder modelBuilder)

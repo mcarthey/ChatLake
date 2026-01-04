@@ -6,7 +6,7 @@ public interface IProjectService
     Task RenameAsync(long projectId, string newName);
     Task ArchiveAsync(long projectId);
 
-    Task AddConversationAsync(long projectId, long conversationId, string addedBy);
+    Task AddConversationAsync(long projectId, long conversationId, string assignedBy);
     Task RemoveConversationAsync(long projectId, long conversationId);
 
     Task<IReadOnlyList<ProjectDto>> ListAsync();
@@ -14,8 +14,8 @@ public interface IProjectService
 
 public sealed record ProjectDto(
     long ProjectId,
+    string ProjectKey,
     string Name,
-    string Status,
+    bool IsActive,
     bool IsSystemGenerated,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
+    DateTime CreatedAtUtc);

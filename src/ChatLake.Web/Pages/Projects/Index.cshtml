@@ -17,9 +17,9 @@ else
         <thead>
             <tr>
                 <th>Name</th>
+                <th>Key</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th>Updated</th>
             </tr>
         </thead>
         <tbody>
@@ -27,9 +27,9 @@ else
         {
             <tr>
                 <td>@project.Name</td>
-                <td>@project.Status</td>
-                <td>@project.CreatedAtUtc.ToString("u")</td>
-                <td>@project.UpdatedAtUtc.ToString("u")</td>
+                <td><code>@project.ProjectKey</code></td>
+                <td>@(project.IsActive ? "Active" : "Archived")</td>
+                <td>@project.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
             </tr>
         }
         </tbody>

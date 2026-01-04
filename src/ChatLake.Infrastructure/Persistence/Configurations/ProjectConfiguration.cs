@@ -8,32 +8,35 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 {
     public void Configure(EntityTypeBuilder<Project> entity)
     {
-        entity.ToTable("Project", t =>
-        {
-            t.HasCheckConstraint("CK_Project_Status", "[Status] IN ('Active','Archived')");
-        });
+        entity.ToTable("Project");
 
         entity.HasKey(e => e.ProjectId);
 
-        entity.Property(e => e.Name)
+        entity.Property(e => e.ProjectKey)
             .IsRequired()
             .HasMaxLength(200);
 
-        entity.HasIndex(e => e.Name)
+        entity.HasIndex(e => e.ProjectKey)
             .IsUnique()
-            .HasDatabaseName("UX_Project_Name");
+            .HasDatabaseName("UQ_Project_ProjectKey");
 
-        entity.Property(e => e.Status)
+        entity.Property(e => e.Name)
             .IsRequired()
-            .HasMaxLength(20);
+            .HasMaxLength(500);
+
+        entity.Property(e => e.Description)
+            .HasMaxLength(2000);
+
+        entity.Property(e => e.CreatedBy)
+            .HasMaxLength(200);
 
         entity.Property(e => e.IsSystemGenerated)
             .IsRequired();
 
-        entity.Property(e => e.CreatedAtUtc)
+        entity.Property(e => e.IsActive)
             .IsRequired();
 
-        entity.Property(e => e.UpdatedAtUtc)
+        entity.Property(e => e.CreatedAtUtc)
             .IsRequired();
     }
 }
