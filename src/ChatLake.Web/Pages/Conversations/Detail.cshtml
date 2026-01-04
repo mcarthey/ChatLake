@@ -116,6 +116,20 @@
             <span><strong>Last:</strong> @Model.Conversation.LastMessageAtUtc.Value.ToString("yyyy-MM-dd HH:mm")</span>
         }
     </div>
+    @if (Model.Topics.Any())
+    {
+        <div class="mt-2">
+            <strong>Topics:</strong>
+            @foreach (var topic in Model.Topics)
+            {
+                <a asp-page="/Analysis/TopicDetail" asp-route-id="@topic.TopicId"
+                   class="badge bg-info text-decoration-none me-1"
+                   title="Score: @topic.Score.ToString("P0")">
+                    @topic.TopicLabel
+                </a>
+            }
+        </div>
+    }
 </div>
 
 <div class="messages-container">
@@ -151,6 +165,44 @@
         </div>
     }
 </div>
+
+@if (Model.SimilarConversations.Any())
+{
+    <div class="card mt-4">
+        <div class="card-header">
+            <strong>Similar Conversations</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 10%">Similarity</th>
+                        <th>Preview</th>
+                        <th style="width: 15%">Messages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var similar in Model.SimilarConversations)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-@(similar.Similarity >= 0.7m ? "success" : similar.Similarity >= 0.4m ? "warning" : "secondary")">
+                                    @similar.Similarity.ToString("P0")
+                                </span>
+                            </td>
+                            <td>
+                                <a asp-page="/Conversations/Detail" asp-route-id="@similar.ConversationId">
+                                    @(similar.PreviewText?.Length > 80 ? similar.PreviewText[..80] + "..." : similar.PreviewText ?? "Untitled")
+                                </a>
+                            </td>
+                            <td>@similar.MessageCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
 
 <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd;">
     <a asp-page="Index">&larr; Back to Conversations</a>

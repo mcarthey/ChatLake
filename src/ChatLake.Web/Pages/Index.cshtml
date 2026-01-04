@@ -1,0 +1,166 @@
+@page
+@model ChatLake.Web.Pages.IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <h2>Dashboard</h2>
+        <p class="text-muted">Overview of your ChatLake data and analysis</p>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card h-100 border-primary">
+            <div class="card-body text-center">
+                <h3 class="card-title text-primary">@Model.ConversationCount</h3>
+                <p class="card-text text-muted mb-0">Conversations</p>
+            </div>
+            <div class="card-footer bg-transparent border-0 text-center">
+                <a asp-page="/Conversations/Index" class="btn btn-sm btn-outline-primary">Browse</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-success">
+            <div class="card-body text-center">
+                <h3 class="card-title text-success">@Model.ProjectCount</h3>
+                <p class="card-text text-muted mb-0">Projects</p>
+            </div>
+            <div class="card-footer bg-transparent border-0 text-center">
+                <a asp-page="/Projects/Index" class="btn btn-sm btn-outline-success">View</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-info">
+            <div class="card-body text-center">
+                <h3 class="card-title text-info">@Model.TopicCount</h3>
+                <p class="card-text text-muted mb-0">Topics</p>
+            </div>
+            <div class="card-footer bg-transparent border-0 text-center">
+                <a asp-page="/Analysis/Topics" class="btn btn-sm btn-outline-info">Explore</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-warning">
+            <div class="card-body text-center">
+                <h3 class="card-title text-warning">@Model.PendingSuggestions</h3>
+                <p class="card-text text-muted mb-0">Pending Suggestions</p>
+            </div>
+            <div class="card-footer bg-transparent border-0 text-center">
+                <a asp-page="/Projects/Suggestions" class="btn btn-sm btn-outline-warning">Review</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Quick Actions</span>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a asp-page="/Import" class="btn btn-outline-primary text-start">
+                        <strong>Import Data</strong>
+                        <small class="d-block text-muted">Upload ChatGPT exports or other conversation data</small>
+                    </a>
+                    <a asp-page="/Analysis/Search" class="btn btn-outline-primary text-start">
+                        <strong>Search Similar</strong>
+                        <small class="d-block text-muted">Find conversations similar to a question</small>
+                    </a>
+                    <a asp-page="/Projects/Suggestions" class="btn btn-outline-primary text-start">
+                        <strong>Review Suggestions</strong>
+                        <small class="d-block text-muted">Accept or reject ML-generated project suggestions</small>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>ML Analysis</span>
+                <a asp-page="/Analysis/Index" class="btn btn-sm btn-outline-secondary">Run Analysis</a>
+            </div>
+            <div class="card-body">
+                @if (Model.LastAnalysisRun != null)
+                {
+                    <p class="mb-2">
+                        <strong>Last Run:</strong> @Model.LastAnalysisRun.Value.ToString("MMM dd, yyyy HH:mm")
+                    </p>
+                }
+                else
+                {
+                    <p class="text-muted mb-2">No analysis has been run yet.</p>
+                }
+
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <span class="badge bg-@(Model.HasClustering ? "success" : "secondary")">
+                            @(Model.HasClustering ? "Done" : "Pending")
+                        </span>
+                        Clustering
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-@(Model.HasTopics ? "success" : "secondary")">
+                            @(Model.HasTopics ? "Done" : "Pending")
+                        </span>
+                        Topic Extraction
+                    </li>
+                    <li class="mb-2">
+                        <span class="badge bg-@(Model.HasSimilarity ? "success" : "secondary")">
+                            @(Model.HasSimilarity ? "Done" : "Pending")
+                        </span>
+                        Similarity Index
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.RecentConversations.Any())
+{
+    <div class="row mt-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Recent Conversations</span>
+                    <a asp-page="/Conversations/Index" class="btn btn-sm btn-outline-secondary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Preview</th>
+                                <th>Messages</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var conv in Model.RecentConversations)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-page="/Conversations/Detail" asp-route-id="@conv.ConversationId">
+                                            @(conv.PreviewText?.Length > 80 ? conv.PreviewText[..80] + "..." : conv.PreviewText ?? "Untitled")
+                                        </a>
+                                    </td>
+                                    <td>@conv.MessageCount</td>
+                                    <td>@conv.FirstMessageAtUtc?.ToString("MMM dd")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}

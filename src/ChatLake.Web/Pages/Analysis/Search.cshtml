@@ -1,0 +1,74 @@
+@page
+@model ChatLake.Web.Pages.Analysis.SearchModel
+@{
+    ViewData["Title"] = "Similarity Search";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <h2>Similarity Search</h2>
+        <p class="text-muted">Find conversations similar to a question or topic</p>
+    </div>
+    <div class="col-auto">
+        <a asp-page="/Analysis/Index" class="btn btn-outline-secondary">Back to Analysis</a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="post">
+            <div class="mb-3">
+                <label for="query" class="form-label">Enter a question or description</label>
+                <textarea class="form-control" id="query" name="Query" rows="3" placeholder="e.g., How do I configure Entity Framework Core with SQL Server?">@Model.Query</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Search</button>
+        </form>
+    </div>
+</div>
+
+@if (Model.Results.Any())
+{
+    <div class="card">
+        <div class="card-header">
+            <strong>Similar Conversations</strong>
+            <span class="text-muted">(@Model.Results.Count results)</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 10%">Similarity</th>
+                        <th>Preview</th>
+                        <th style="width: 15%">Messages</th>
+                        <th style="width: 15%">Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var result in Model.Results)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-@(result.Similarity >= 0.7m ? "success" : result.Similarity >= 0.4m ? "warning" : "secondary")">
+                                    @result.Similarity.ToString("P0")
+                                </span>
+                            </td>
+                            <td>
+                                <a asp-page="/Conversations/Detail" asp-route-id="@result.ConversationId">
+                                    @(result.PreviewText?.Length > 100 ? result.PreviewText[..100] + "..." : result.PreviewText ?? "Untitled")
+                                </a>
+                            </td>
+                            <td>@result.MessageCount</td>
+                            <td>@result.FirstMessageAtUtc?.ToString("MMM dd, yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(Model.Query))
+{
+    <div class="alert alert-info">
+        No similar conversations found. Try a different query or run the similarity analysis first.
+    </div>
+}

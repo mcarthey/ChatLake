@@ -1,0 +1,78 @@
+@page
+@model ChatLake.Web.Pages.Analysis.DriftModel
+@{
+    ViewData["Title"] = "Topic Drift";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <h2>Topic Drift</h2>
+        <p class="text-muted">Track how topics within projects change over time</p>
+    </div>
+    <div class="col-auto">
+        <a asp-page="/Analysis/Index" class="btn btn-outline-secondary">Back to Analysis</a>
+    </div>
+</div>
+
+@if (Model.HighDriftProjects.Any())
+{
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <strong>High Drift Projects</strong>
+                    <span class="text-muted">(Projects with significant topic changes)</span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Project</th>
+                                <th>Average Drift</th>
+                                <th>Latest Drift</th>
+                                <th>Windows</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var project in Model.HighDriftProjects)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-page="/Projects/Detail" asp-route-id="@project.ProjectId">
+                                            @project.ProjectName
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@(project.AverageDriftScore >= 0.5m ? "danger" : project.AverageDriftScore >= 0.3m ? "warning" : "success")">
+                                            @project.AverageDriftScore.ToString("P0")
+                                        </span>
+                                    </td>
+                                    <td>@project.LatestDriftScore.ToString("P0")</td>
+                                    <td>@project.WindowCount</td>
+                                    <td class="text-end">
+                                        <a asp-page="/Analysis/ProjectDrift" asp-route-id="@project.ProjectId" class="btn btn-sm btn-outline-primary">
+                                            View Details
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <p class="mb-2">No drift data available yet. Drift detection requires:</p>
+        <ol class="mb-2">
+            <li>Topics to be extracted</li>
+            <li>Conversations assigned to projects</li>
+            <li>Enough conversations across time windows</li>
+        </ol>
+        <a asp-page="/Analysis/Index" class="btn btn-primary">Go to Analysis</a>
+    </div>
+}

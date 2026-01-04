@@ -1,0 +1,161 @@
+@page
+@model ChatLake.Web.Pages.Analysis.IndexModel
+@{
+    ViewData["Title"] = "Analysis Overview";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <h2>Analysis Overview</h2>
+        <p class="text-muted">Run ML analysis on your conversation data</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Model.Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <strong>Clustering</strong>
+                @if (Model.ClusteringRun != null)
+                {
+                    <span class="badge bg-success float-end">Completed</span>
+                }
+            </div>
+            <div class="card-body">
+                <p class="card-text">Group similar conversations into suggested projects using TF-IDF and KMeans clustering.</p>
+                @if (Model.ClusteringRun != null)
+                {
+                    <p class="text-muted small mb-2">
+                        Last run: @Model.ClusteringRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
+                    </p>
+                }
+                <form method="post" asp-page-handler="RunClustering">
+                    <button type="submit" class="btn btn-primary">
+                        @(Model.ClusteringRun != null ? "Re-run" : "Run") Clustering
+                    </button>
+                </form>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a asp-page="/Projects/Suggestions">View Suggestions</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <strong>Topic Extraction</strong>
+                @if (Model.TopicsRun != null)
+                {
+                    <span class="badge bg-success float-end">Completed</span>
+                }
+            </div>
+            <div class="card-body">
+                <p class="card-text">Extract topics from conversations using Latent Dirichlet Allocation (LDA).</p>
+                @if (Model.TopicsRun != null)
+                {
+                    <p class="text-muted small mb-2">
+                        Last run: @Model.TopicsRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
+                    </p>
+                }
+                <form method="post" asp-page-handler="RunTopics">
+                    <button type="submit" class="btn btn-primary">
+                        @(Model.TopicsRun != null ? "Re-run" : "Run") Topic Extraction
+                    </button>
+                </form>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a asp-page="/Analysis/Topics">View Topics</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <strong>Similarity Index</strong>
+                @if (Model.SimilarityRun != null)
+                {
+                    <span class="badge bg-success float-end">Completed</span>
+                }
+            </div>
+            <div class="card-body">
+                <p class="card-text">Build similarity index to find related conversations ("Have I solved this before?").</p>
+                @if (Model.SimilarityRun != null)
+                {
+                    <p class="text-muted small mb-2">
+                        Last run: @Model.SimilarityRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
+                    </p>
+                }
+                <form method="post" asp-page-handler="RunSimilarity">
+                    <button type="submit" class="btn btn-primary">
+                        @(Model.SimilarityRun != null ? "Re-run" : "Run") Similarity
+                    </button>
+                </form>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a asp-page="/Analysis/Search">Search Similar</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">
+                <strong>Recent Analysis Runs</strong>
+            </div>
+            <div class="card-body p-0">
+                @if (Model.RecentRuns.Any())
+                {
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Type</th>
+                                <th>Model</th>
+                                <th>Started</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var run in Model.RecentRuns)
+                            {
+                                <tr>
+                                    <td>@run.RunType</td>
+                                    <td><code>@run.ModelName @run.ModelVersion</code></td>
+                                    <td>@run.StartedAtUtc.ToString("MMM dd, HH:mm")</td>
+                                    <td>
+                                        <span class="badge bg-@(run.Status == "Completed" ? "success" : run.Status == "Running" ? "primary" : "danger")">
+                                            @run.Status
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-muted p-3 mb-0">No analysis runs yet.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>

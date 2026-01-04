@@ -1,62 +1,73 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - ChatLake.Web</title>
+    <title>@ViewData["Title"] - ChatLake</title>
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/ChatLake.Web.styles.css" asp-append-version="true" />
+    <style>
+        .navbar-brand { font-weight: 600; color: #0d6efd !important; }
+        .nav-link { font-weight: 500; }
+        .nav-link:hover { color: #0d6efd !important; }
+        .dropdown-menu { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); }
+        .dropdown-item:active { background-color: #0d6efd; }
+    </style>
 </head>
 
 <body>
     <header class="sticky-top">
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow">
+        <nav class="navbar navbar-expand-md navbar-light bg-white border-bottom shadow-sm">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">ChatLake.Web</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse"
-                    aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <a class="navbar-brand" asp-page="/Index">ChatLake</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <!-- MVC -->
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav me-auto">
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">
-                                Home
-                            </a>
+                            <a class="nav-link" asp-page="/Index">Dashboard</a>
                         </li>
 
-                        <!-- Razor Pages -->
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-page="/Import">
-                                Import
-                            </a>
-                        </li>
-
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-page="/Conversations/Index">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 Conversations
                             </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-page="/Conversations/Index">Browse All</a></li>
+                                <li><a class="dropdown-item" asp-page="/Analysis/Search">Search Similar</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" asp-page="/Import">Import Data</a></li>
+                            </ul>
                         </li>
 
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-page="/Projects/Index">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 Projects
                             </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-page="/Projects/Index">All Projects</a></li>
+                                <li><a class="dropdown-item" asp-page="/Projects/Suggestions">ML Suggestions</a></li>
+                            </ul>
                         </li>
 
-                        <!-- MVC -->
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">
-                                Privacy
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Analysis
                             </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-page="/Analysis/Index">Overview</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" asp-page="/Analysis/Topics">Topics</a></li>
+                                <li><a class="dropdown-item" asp-page="/Analysis/Search">Similarity Search</a></li>
+                                <li><a class="dropdown-item" asp-page="/Analysis/Drift">Topic Drift</a></li>
+                            </ul>
                         </li>
                     </ul>
-
-                    @* <partial name="_LoginPartial" /> *@
                 </div>
             </div>
         </nav>

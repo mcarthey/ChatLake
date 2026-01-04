@@ -1,0 +1,80 @@
+@page "{id:long}"
+@model ChatLake.Web.Pages.Analysis.TopicDetailModel
+@{
+    ViewData["Title"] = Model.Topic?.Label ?? "Topic";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-page="/Analysis/Index">Analysis</a></li>
+                <li class="breadcrumb-item"><a asp-page="/Analysis/Topics">Topics</a></li>
+                <li class="breadcrumb-item active" aria-current="page">@Model.Topic?.Label</li>
+            </ol>
+        </nav>
+        <h2>@Model.Topic?.Label</h2>
+    </div>
+</div>
+
+@if (Model.Topic != null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="mb-3">
+                <strong>Keywords:</strong>
+                @foreach (var keyword in Model.Topic.Keywords)
+                {
+                    <span class="badge bg-light text-dark me-1">@keyword</span>
+                }
+            </div>
+            <div>
+                <strong>Conversations:</strong> @Model.Topic.ConversationCount
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Conversations.Any())
+    {
+        <div class="card">
+            <div class="card-header">
+                <strong>Conversations in this Topic</strong>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 10%">Score</th>
+                            <th>Preview</th>
+                            <th style="width: 15%">Messages</th>
+                            <th style="width: 15%">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var conv in Model.Conversations)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="badge bg-@(conv.Score >= 0.7m ? "success" : conv.Score >= 0.4m ? "warning" : "secondary")">
+                                        @conv.Score.ToString("P0")
+                                    </span>
+                                </td>
+                                <td>
+                                    <a asp-page="/Conversations/Detail" asp-route-id="@conv.ConversationId">
+                                        @(conv.PreviewText?.Length > 100 ? conv.PreviewText[..100] + "..." : conv.PreviewText ?? "Untitled")
+                                    </a>
+                                </td>
+                                <td>@conv.MessageCount</td>
+                                <td>@conv.FirstMessageAtUtc?.ToString("MMM dd, yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="alert alert-warning">Topic not found.</div>
+}
