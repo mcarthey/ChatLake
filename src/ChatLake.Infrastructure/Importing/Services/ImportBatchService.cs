@@ -40,7 +40,30 @@ public class ImportBatchService : IImportBatchService
         return batch.ImportBatchId;
     }
 
-    public async Task MarkCommittedAsync(long importBatchId, int artifactCount)
+    public async Task MarkProcessingAsync(long importBatchId)
+    {
+        var batch = await LoadBatchAsync(importBatchId);
+
+        batch.Status = "Processing";
+        batch.StartedAtUtc = DateTime.UtcNow;
+        batch.LastHeartbeatUtc = DateTime.UtcNow;
+        batch.ProcessedConversationCount = 0;
+
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task UpdateProgressAsync(long importBatchId, int processedCount, int? totalCount)
+    {
+        var batch = await LoadBatchAsync(importBatchId);
+
+        batch.ProcessedConversationCount = processedCount;
+        batch.TotalConversationCount = totalCount;
+        batch.LastHeartbeatUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task MarkCommittedAsync(long importBatchId, int artifactCount, int conversationCount)
     {
         if (artifactCount < 0)
             throw new ArgumentOutOfRangeException(nameof(artifactCount));
@@ -49,18 +72,42 @@ public class ImportBatchService : IImportBatchService
 
         batch.Status = "Committed";
         batch.ArtifactCount = artifactCount;
+        batch.ProcessedConversationCount = conversationCount;
+        batch.CompletedAtUtc = DateTime.UtcNow;
+        batch.LastHeartbeatUtc = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
     }
 
-    public async Task MarkFailedAsync(long importBatchId, string? notes)
+    public async Task MarkFailedAsync(long importBatchId, string? errorMessage)
     {
         var batch = await LoadBatchAsync(importBatchId);
 
         batch.Status = "Failed";
-        batch.Notes = notes;
+        batch.ErrorMessage = errorMessage;
+        batch.CompletedAtUtc = DateTime.UtcNow;
+        batch.LastHeartbeatUtc = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task<ImportBatchStatus?> GetStatusAsync(long importBatchId)
+    {
+        var batch = await _dbContext.ImportBatches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.ImportBatchId == importBatchId);
+
+        if (batch == null)
+            return null;
+
+        return new ImportBatchStatus(
+            batch.ImportBatchId,
+            batch.Status,
+            batch.ProcessedConversationCount,
+            batch.TotalConversationCount,
+            batch.StartedAtUtc,
+            batch.CompletedAtUtc,
+            batch.ErrorMessage);
     }
 
     private async Task<ImportBatch> LoadBatchAsync(long importBatchId)

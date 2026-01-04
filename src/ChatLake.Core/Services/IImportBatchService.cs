@@ -10,7 +10,45 @@ public interface IImportBatchService
         string? importedBy,
         string? importLabel);
 
-    Task MarkCommittedAsync(long importBatchId, int artifactCount);
+    /// <summary>
+    /// Marks the batch as "Processing" and records the start time.
+    /// </summary>
+    Task MarkProcessingAsync(long importBatchId);
 
-    Task MarkFailedAsync(long importBatchId, string? notes);
+    /// <summary>
+    /// Updates progress during processing.
+    /// </summary>
+    Task UpdateProgressAsync(long importBatchId, int processedCount, int? totalCount);
+
+    Task MarkCommittedAsync(long importBatchId, int artifactCount, int conversationCount);
+
+    Task MarkFailedAsync(long importBatchId, string? errorMessage);
+
+    /// <summary>
+    /// Gets the current status of an import batch.
+    /// </summary>
+    Task<ImportBatchStatus?> GetStatusAsync(long importBatchId);
+}
+
+/// <summary>
+/// DTO for import batch status - used for progress polling.
+/// </summary>
+public record ImportBatchStatus(
+    long ImportBatchId,
+    string Status,
+    int ProcessedConversationCount,
+    int? TotalConversationCount,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    string? ErrorMessage)
+{
+    public TimeSpan? ElapsedTime => StartedAtUtc.HasValue
+        ? (CompletedAtUtc ?? DateTime.UtcNow) - StartedAtUtc.Value
+        : null;
+
+    public double? ProgressPercentage => TotalConversationCount > 0
+        ? (double)ProcessedConversationCount / TotalConversationCount.Value * 100
+        : null;
+
+    public bool IsComplete => Status == "Committed" || Status == "Failed";
 }

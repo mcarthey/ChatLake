@@ -66,6 +66,14 @@ public class ChatLakeDbContext : DbContext
                   entity.Property(e => e.ImportLabel)
                     .HasMaxLength(200);
 
+                  entity.Property(e => e.ErrorMessage)
+                    .HasMaxLength(4000);
+
+                  // Ignore computed properties
+                  entity.Ignore(e => e.ElapsedTime);
+                  entity.Ignore(e => e.ProgressPercentage);
+                  entity.Ignore(e => e.IsComplete);
+
                   entity.HasIndex(e => e.ImportedAtUtc)
                     .HasDatabaseName("IX_ImportBatch_ImportedAtUtc");
             });

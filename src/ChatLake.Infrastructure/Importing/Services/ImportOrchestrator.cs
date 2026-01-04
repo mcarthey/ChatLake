@@ -1,5 +1,4 @@
 using ChatLake.Core.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace ChatLake.Infrastructure.Importing.Services;
 
@@ -24,7 +23,8 @@ public class ImportOrchestrator : IImportOrchestrator
         string? sourceVersion,
         string? importedBy,
         string? importLabel,
-        IReadOnlyCollection<ImportJsonArtifactRequest> artifacts)
+        IReadOnlyCollection<ImportJsonArtifactRequest> artifacts,
+        CancellationToken ct = default)
     {
         if (artifacts == null || artifacts.Count == 0)
             throw new ArgumentException("At least one artifact is required.", nameof(artifacts));
@@ -37,29 +37,53 @@ public class ImportOrchestrator : IImportOrchestrator
 
         try
         {
+            // Mark as processing
+            await _importBatchService.MarkProcessingAsync(batchId);
+
+            var totalConversations = 0;
+
             foreach (var artifact in artifacts)
             {
+                ct.ThrowIfCancellationRequested();
+
                 var rawArtifactId = await _rawArtifactService.AddJsonArtifactAsync(
                     batchId,
                     artifact.ArtifactType,
                     artifact.ArtifactName,
                     artifact.JsonPayload);
 
-                await _ingestionPipeline.IngestRawArtifactAsync(rawArtifactId);
+                // Progress callback - updates the batch status
+                async Task OnProgress(int processedCount, int? total)
+                {
+                    await _importBatchService.UpdateProgressAsync(
+                        batchId,
+                        totalConversations + processedCount,
+                        total.HasValue ? totalConversations + total.Value : null);
+                }
+
+                var result = await _ingestionPipeline.IngestRawArtifactAsync(
+                    rawArtifactId,
+                    OnProgress,
+                    ct);
+
+                totalConversations += result.ConversationCount;
             }
 
             await _importBatchService.MarkCommittedAsync(
                 batchId,
-                artifacts.Count);
+                artifacts.Count,
+                totalConversations);
 
             return batchId;
         }
+        catch (OperationCanceledException)
+        {
+            await _importBatchService.MarkFailedAsync(batchId, "Import was cancelled.");
+            throw;
+        }
         catch (Exception ex)
         {
-            await _importBatchService.MarkFailedAsync(
-                batchId,
-                ex.Message);
-
+            await _importBatchService.MarkFailedAsync(batchId, ex.Message);
             throw;
         }
     }

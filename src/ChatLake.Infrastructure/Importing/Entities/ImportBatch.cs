@@ -17,7 +17,28 @@ public class ImportBatch
     public string? Notes { get; set; }
 
     /// <summary>
-    /// Staged | Committed | Failed
+    /// Staged | Processing | Committed | Failed
     /// </summary>
     public string Status { get; set; } = "Staged";
+
+    // Progress tracking fields
+    public DateTime? StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public DateTime? LastHeartbeatUtc { get; set; }
+
+    public int ProcessedConversationCount { get; set; }
+    public int? TotalConversationCount { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
+    // Computed properties for UI
+    public TimeSpan? ElapsedTime => StartedAtUtc.HasValue
+        ? (CompletedAtUtc ?? DateTime.UtcNow) - StartedAtUtc.Value
+        : null;
+
+    public double? ProgressPercentage => TotalConversationCount > 0
+        ? (double)ProcessedConversationCount / TotalConversationCount.Value * 100
+        : null;
+
+    public bool IsComplete => Status == "Committed" || Status == "Failed";
 }

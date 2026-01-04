@@ -3,13 +3,159 @@
 
 <h2>Import</h2>
 
-<form method="post" enctype="multipart/form-data">
-    <div asp-validation-summary="All" class="text-danger"></div>
+@if (Model.ImportBatchId.HasValue)
+{
+    <div id="progress-container" data-batch-id="@Model.ImportBatchId">
+        <h3>Import in Progress</h3>
+        <div class="progress-info">
+            <p><strong>Status:</strong> <span id="status">Processing...</span></p>
+            <p><strong>Conversations:</strong> <span id="count">0</span> processed</p>
+            <p><strong>Elapsed:</strong> <span id="elapsed">0:00</span></p>
+        </div>
+        <div class="progress-bar-container" style="width: 100%; background-color: #e0e0e0; border-radius: 4px; margin: 10px 0;">
+            <div id="progress-bar" style="width: 0%; height: 24px; background-color: #4caf50; border-radius: 4px; transition: width 0.3s;"></div>
+        </div>
+        <p id="message" style="color: green; display: none;"></p>
+        <p id="error" style="color: red; display: none;"></p>
+    </div>
 
-    @Html.AntiForgeryToken()
+    <script>
+        (function() {
+            const batchId = @Model.ImportBatchId;
+            const statusSpan = document.getElementById('status');
+            const countSpan = document.getElementById('count');
+            const elapsedSpan = document.getElementById('elapsed');
+            const progressBar = document.getElementById('progress-bar');
+            const messageP = document.getElementById('message');
+            const errorP = document.getElementById('error');
 
-    <input type="file" asp-for="Upload" />
-    <span asp-validation-for="Upload"></span>
+            function formatElapsed(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return mins + ':' + secs.toString().padStart(2, '0');
+            }
 
-    <button type="submit">Import</button>
-</form>
+            async function checkStatus() {
+                try {
+                    const response = await fetch('/api/import/' + batchId + '/status');
+                    if (!response.ok) {
+                        throw new Error('Failed to get status');
+                    }
+
+                    const data = await response.json();
+
+                    statusSpan.textContent = data.status;
+                    countSpan.textContent = data.processedConversationCount;
+
+                    if (data.elapsedSeconds) {
+                        elapsedSpan.textContent = formatElapsed(data.elapsedSeconds);
+                    }
+
+                    if (data.progressPercentage) {
+                        progressBar.style.width = data.progressPercentage.toFixed(1) + '%';
+                    } else if (data.processedConversationCount > 0) {
+                        // Indeterminate progress - pulse animation
+                        progressBar.style.width = '100%';
+                        progressBar.style.opacity = '0.5';
+                    }
+
+                    if (data.status === 'Committed') {
+                        statusSpan.textContent = 'Complete';
+                        progressBar.style.width = '100%';
+                        progressBar.style.opacity = '1';
+                        messageP.textContent = 'Import completed successfully! ' + data.processedConversationCount + ' conversations imported.';
+                        messageP.style.display = 'block';
+                        // Redirect after a short delay
+                        setTimeout(() => {
+                            window.location.href = '/Conversations';
+                        }, 2000);
+                        return; // Stop polling
+                    }
+
+                    if (data.status === 'Failed') {
+                        statusSpan.textContent = 'Failed';
+                        progressBar.style.backgroundColor = '#f44336';
+                        errorP.textContent = 'Import failed: ' + (data.errorMessage || 'Unknown error');
+                        errorP.style.display = 'block';
+                        return; // Stop polling
+                    }
+
+                    // Continue polling
+                    setTimeout(checkStatus, 1000);
+                } catch (err) {
+                    console.error('Status check error:', err);
+                    setTimeout(checkStatus, 2000);
+                }
+            }
+
+            // Start polling
+            checkStatus();
+        })();
+    </script>
+}
+else
+{
+    <form method="post" enctype="multipart/form-data">
+        <div asp-validation-summary="All" class="text-danger"></div>
+
+        @Html.AntiForgeryToken()
+
+        <div style="margin-bottom: 15px;">
+            <label for="Upload">Select conversations.json file:</label><br/>
+            <input type="file" asp-for="Upload" accept=".json" />
+            <span asp-validation-for="Upload" class="text-danger"></span>
+        </div>
+
+        <button type="submit">Import</button>
+    </form>
+
+    <hr/>
+
+    <h3>Recent Imports</h3>
+    @if (Model.RecentImports?.Any() == true)
+    {
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f0f0f0;">
+                    <th style="padding: 8px; text-align: left;">Date</th>
+                    <th style="padding: 8px; text-align: left;">Status</th>
+                    <th style="padding: 8px; text-align: right;">Conversations</th>
+                    <th style="padding: 8px; text-align: right;">Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var import in Model.RecentImports)
+                {
+                    <tr style="border-bottom: 1px solid #ddd;">
+                        <td style="padding: 8px;">@import.ImportedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td style="padding: 8px;">
+                            @if (import.Status == "Committed")
+                            {
+                                <span style="color: green;">@import.Status</span>
+                            }
+                            else if (import.Status == "Failed")
+                            {
+                                <span style="color: red;">@import.Status</span>
+                            }
+                            else
+                            {
+                                <span>@import.Status</span>
+                            }
+                        </td>
+                        <td style="padding: 8px; text-align: right;">@import.ProcessedConversationCount</td>
+                        <td style="padding: 8px; text-align: right;">
+                            @if (import.ElapsedTime.HasValue)
+                            {
+                                @import.ElapsedTime.Value.ToString(@"mm\:ss")
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p>No imports yet.</p>
+    }
+}

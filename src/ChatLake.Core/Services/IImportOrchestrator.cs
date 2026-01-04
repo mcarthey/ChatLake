@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ChatLake.Core.Services;
@@ -10,7 +11,8 @@ public interface IImportOrchestrator
         string? sourceVersion,
         string? importedBy,
         string? importLabel,
-        IReadOnlyCollection<ImportJsonArtifactRequest> artifacts);
+        IReadOnlyCollection<ImportJsonArtifactRequest> artifacts,
+        CancellationToken ct = default);
 }
 
 public sealed record ImportJsonArtifactRequest(
