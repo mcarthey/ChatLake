@@ -29,6 +29,7 @@ builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<IConversationQueryService, ConversationQueryService>();
 builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuilder>();
 builder.Services.AddScoped<IInferenceRunService, InferenceRunService>();
+builder.Services.AddScoped<IClusteringService, ClusteringService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages(); 

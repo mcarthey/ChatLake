@@ -18,7 +18,9 @@
       "Bash(where:*)",
       "Bash(echo:*)",
       "Bash(curl:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "WebSearch",
+      "Bash(git -C \"E:/Documents/dev/ChatLake\" add -A)"
     ]
   }
 }

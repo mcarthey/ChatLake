@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ChatLake.Core\ChatLake.Core.csproj" />
+    <ProjectReference Include="..\..\src\ChatLake.Inference\ChatLake.Inference.csproj" />
     <ProjectReference Include="..\..\src\ChatLake.Infrastructure\ChatLake.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ChatLake.Core\ChatLake.Core.csproj" />
+    <ProjectReference Include="..\ChatLake.Inference\ChatLake.Inference.csproj" />
   </ItemGroup>
 
   <ItemGroup>
