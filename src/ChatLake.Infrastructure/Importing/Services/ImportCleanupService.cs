@@ -77,6 +77,9 @@ public class ImportCleanupService : IImportCleanupService
 
     private async Task<CleanupResult> DeleteBatchAsync(long batchId, CancellationToken ct)
     {
+        // Clear any stale tracked entities to prevent conflicts
+        _db.ChangeTracker.Clear();
+
         var artifactsDeleted = 0;
         var conversationsDeleted = 0;
         var filesDeleted = 0;
