@@ -33,6 +33,7 @@ builder.Services.AddScoped<IClusteringService, ClusteringService>();
 builder.Services.AddScoped<IProjectSuggestionService, ProjectSuggestionService>();
 builder.Services.AddScoped<ITopicExtractionService, TopicExtractionService>();
 builder.Services.AddScoped<IDriftDetectionService, DriftDetectionService>();
+builder.Services.AddScoped<ISimilarityService, SimilarityService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages(); 
