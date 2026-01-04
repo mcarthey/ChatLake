@@ -31,6 +31,7 @@ builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuild
 builder.Services.AddScoped<IInferenceRunService, InferenceRunService>();
 builder.Services.AddScoped<IClusteringService, ClusteringService>();
 builder.Services.AddScoped<IProjectSuggestionService, ProjectSuggestionService>();
+builder.Services.AddScoped<ITopicExtractionService, TopicExtractionService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages(); 
