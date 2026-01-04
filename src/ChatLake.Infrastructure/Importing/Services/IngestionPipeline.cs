@@ -118,6 +118,9 @@ public sealed class IngestionPipeline
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    // Clear any stale/detached entities from the failed ingestion
+                    _db.ChangeTracker.Clear();
+
                     // Log failure but continue processing
                     _db.ParsingFailures.Add(new Conversations.Entities.ParsingFailure
                     {
@@ -125,6 +128,7 @@ public sealed class IngestionPipeline
                         FailureStage = "Ingest",
                         FailureMessage = $"Conversation {convo.ExternalConversationId}: {ex.Message}"
                     });
+                    await _db.SaveChangesAsync(ct);
                     failureCount++;
                 }
             }

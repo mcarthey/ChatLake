@@ -80,6 +80,9 @@ public sealed class ConversationIngestionService : IConversationIngestionService
             {
                 // Expected when unique constraints reject duplicates.
                 // This is the idempotency mechanism.
+                // Clear the ChangeTracker to prevent stale/detached entities
+                // from causing issues on subsequent saves.
+                _db.ChangeTracker.Clear();
             }
         }
     }
