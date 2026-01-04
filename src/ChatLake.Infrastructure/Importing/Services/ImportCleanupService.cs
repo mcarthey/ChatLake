@@ -24,22 +24,24 @@ public class ImportCleanupService : IImportCleanupService
             return new CleanupResult(0, 0, 0, 0, $"Batch {importBatchId} not found.");
         }
 
-        // Only allow cleanup of failed or stale processing batches
+        // Only allow cleanup of non-committed batches
         if (batch.Status == "Committed")
         {
             return new CleanupResult(0, 0, 0, 0,
                 "Cannot cleanup committed batches. Use a different mechanism to remove imported data.");
         }
 
+        // For Processing batches, check if stale (no heartbeat for > threshold, or no heartbeat at all)
         if (batch.Status == "Processing")
         {
-            var isStale = batch.LastHeartbeatUtc.HasValue
-                && DateTime.UtcNow - batch.LastHeartbeatUtc.Value > _staleThreshold;
+            var isStale = !batch.LastHeartbeatUtc.HasValue
+                || DateTime.UtcNow - batch.LastHeartbeatUtc.Value > _staleThreshold;
 
             if (!isStale)
             {
                 return new CleanupResult(0, 0, 0, 0,
-                    "Batch is still processing. Wait for completion or wait 1 hour for stale detection.");
+                    $"Batch is still processing (last heartbeat {(DateTime.UtcNow - batch.LastHeartbeatUtc!.Value).TotalMinutes:F0} min ago). " +
+                    "Wait for completion or wait 1 hour for stale detection.");
             }
         }
 
@@ -52,7 +54,7 @@ public class ImportCleanupService : IImportCleanupService
 
         var batchIds = await _db.ImportBatches
             .Where(b => b.Status == "Failed"
-                || (b.Status == "Processing" && b.LastHeartbeatUtc < staleThreshold)
+                || (b.Status == "Processing" && (b.LastHeartbeatUtc == null || b.LastHeartbeatUtc < staleThreshold))
                 || (b.Status == "Staged" && b.ImportedAtUtc < staleThreshold))
             .Select(b => b.ImportBatchId)
             .ToListAsync(ct);
