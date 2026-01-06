@@ -136,7 +136,8 @@ public sealed record ClusterStats(
     uint ClusterId,
     int Count,
     IReadOnlyList<long> ConversationIds,
-    decimal Confidence);
+    decimal Confidence,
+    int OutlierCount = 0);
 
 /// <summary>
 /// Complete result from clustering pipeline.

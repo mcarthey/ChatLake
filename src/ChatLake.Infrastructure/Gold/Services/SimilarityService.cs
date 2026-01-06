@@ -37,7 +37,9 @@ public sealed class SimilarityService : ISimilarityService
         var stopwatch = Stopwatch.StartNew();
 
         // Load all conversations with their message text
+        Console.WriteLine("[Similarity] Loading conversations from database...");
         var conversations = await LoadConversationsAsync();
+        Console.WriteLine($"[Similarity] Loaded {conversations.Count} conversations in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
         if (conversations.Count < 2)
         {
@@ -61,16 +63,22 @@ public sealed class SimilarityService : ISimilarityService
         try
         {
             // Build TF-IDF vectors
+            Console.WriteLine($"[Similarity] Building TF-IDF vectors for {conversations.Count} conversations...");
             var pipeline = new ConversationSimilarityPipeline(seed: 42);
             pipeline.BuildVectors(conversations);
+            Console.WriteLine($"[Similarity] Vectors built in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
             // Calculate all pairs above threshold
+            Console.WriteLine($"[Similarity] Calculating pairs (threshold: {options.MinSimilarityThreshold})...");
             var pairs = pipeline.CalculateAllPairs(
                 options.MinSimilarityThreshold,
                 options.MaxPairsPerConversation);
+            Console.WriteLine($"[Similarity] Found {pairs.Count} pairs in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
             // Store pairs in database
+            Console.WriteLine($"[Similarity] Storing {pairs.Count} pairs to database...");
             var pairsStored = await StorePairsAsync(runId, pairs, options.Method);
+            Console.WriteLine($"[Similarity] Stored in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
             var metrics = JsonSerializer.Serialize(new
             {
@@ -187,31 +195,21 @@ public sealed class SimilarityService : ISimilarityService
 
     private async Task<List<ConversationTextInput>> LoadConversationsAsync()
     {
-        var conversations = await _db.Conversations
-            .Select(c => new { c.ConversationId })
+        // Load all messages in a single query and group by conversation
+        var allMessages = await _db.Messages
+            .OrderBy(m => m.ConversationId)
+            .ThenBy(m => m.SequenceIndex)
+            .Select(m => new { m.ConversationId, m.Content })
             .ToListAsync();
 
-        var result = new List<ConversationTextInput>();
-
-        foreach (var conv in conversations)
-        {
-            var messages = await _db.Messages
-                .Where(m => m.ConversationId == conv.ConversationId)
-                .OrderBy(m => m.SequenceIndex)
-                .Select(m => m.Content)
-                .ToListAsync();
-
-            if (messages.Count == 0)
-                continue;
-
-            result.Add(new ConversationTextInput
+        return allMessages
+            .GroupBy(m => m.ConversationId)
+            .Select(g => new ConversationTextInput
             {
-                ConversationId = conv.ConversationId,
-                Text = string.Join(" ", messages)
-            });
-        }
-
-        return result;
+                ConversationId = g.Key,
+                Text = string.Join(" ", g.Select(m => m.Content))
+            })
+            .ToList();
     }
 
     private async Task<int> StorePairsAsync(

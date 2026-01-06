@@ -255,17 +255,64 @@ public sealed class TopicExtractionService : ITopicExtractionService
 
     private static bool IsStopWord(string word)
     {
+        // Filter unicode escapes, special characters, and very short words
+        if (word.Length < 3 ||
+            word.StartsWith("\\u") ||
+            word.StartsWith("\\r") ||
+            word.StartsWith("\\n") ||
+            word.Contains("\"") ||
+            word.Contains("'") ||
+            word.StartsWith("<") ||
+            word.StartsWith("http") ||
+            word.All(c => char.IsDigit(c)))
+        {
+            return true;
+        }
+
         var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
+            // Articles, conjunctions, prepositions
             "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
             "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
             "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
             "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
-            "used", "this", "that", "these", "those", "i", "you", "he", "she", "it",
-            "we", "they", "what", "which", "who", "when", "where", "why", "how",
+            "used", "this", "that", "these", "those", "into", "onto", "upon", "about",
+            // Pronouns
+            "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
+            "my", "your", "his", "its", "our", "their", "mine", "yours", "hers", "ours", "theirs",
+            "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves",
+            // Question words
+            "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+            // Quantifiers
             "all", "each", "every", "both", "few", "more", "most", "other", "some",
             "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too",
-            "very", "just", "also", "now", "here", "there", "then", "once", "just"
+            "very", "just", "also", "now", "here", "there", "then", "once",
+            // Common verbs
+            "get", "got", "getting", "make", "made", "making", "take", "took", "taking",
+            "come", "came", "coming", "go", "went", "going", "know", "knew", "knowing",
+            "think", "thought", "see", "saw", "seeing", "want", "wanted", "wanting",
+            "use", "using", "find", "found", "give", "gave", "tell", "told",
+            "work", "working", "seem", "seemed", "feel", "felt", "try", "tried",
+            "leave", "left", "call", "called", "keep", "kept", "let", "begin", "began",
+            "show", "showed", "hear", "heard", "play", "played", "run", "ran", "move", "moved",
+            // Common conversational words
+            "like", "said", "says", "say", "please", "thanks", "thank", "okay", "yes", "yeah",
+            "sure", "well", "really", "actually", "basically", "literally", "probably",
+            "maybe", "something", "anything", "everything", "nothing", "someone", "anyone",
+            "everyone", "thing", "things", "way", "ways", "time", "times", "day", "days",
+            "year", "years", "people", "person", "place", "part", "good", "great", "new",
+            "first", "last", "long", "little", "big", "high", "small", "large", "next",
+            "early", "young", "important", "public", "bad", "right", "able", "back",
+            // AI conversation artifacts
+            "user", "assistant", "provided", "context", "model", "request", "response",
+            "information", "example", "following", "based", "using", "help", "need",
+            "want", "would", "could", "create", "generated", "output", "input",
+            "related", "specific", "include", "including", "however", "therefore",
+            "additionally", "furthermore", "moreover", "thus", "hence", "turn",
+            // Common noise
+            "null", "undefined", "true", "false", "string", "number", "object", "array",
+            "function", "return", "const", "var", "let", "class", "public", "private",
+            "void", "int", "bool", "data", "value", "values", "name", "names", "type", "types"
         };
 
         return stopWords.Contains(word);

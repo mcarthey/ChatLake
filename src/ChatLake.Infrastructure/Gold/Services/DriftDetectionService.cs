@@ -152,8 +152,13 @@ public sealed class DriftDetectionService : IDriftDetectionService
 
     public async Task<IReadOnlyList<ProjectDriftSummaryDto>> GetHighDriftProjectsAsync(int limit = 10)
     {
-        // Get latest drift metric for each project
-        var latestMetrics = await _db.ProjectDriftMetrics
+        // Load all drift metrics and group in memory (EF Core can't translate complex GroupBy)
+        var allMetrics = await _db.ProjectDriftMetrics.ToListAsync();
+
+        if (!allMetrics.Any())
+            return [];
+
+        var groupedMetrics = allMetrics
             .GroupBy(m => m.ProjectId)
             .Select(g => new
             {
@@ -164,14 +169,14 @@ public sealed class DriftDetectionService : IDriftDetectionService
             })
             .OrderByDescending(x => x.LatestMetric.DriftScore)
             .Take(limit)
-            .ToListAsync();
+            .ToList();
 
-        var projectIds = latestMetrics.Select(m => m.ProjectId).ToList();
+        var projectIds = groupedMetrics.Select(m => m.ProjectId).ToList();
         var projects = await _db.Projects
             .Where(p => projectIds.Contains(p.ProjectId))
             .ToDictionaryAsync(p => p.ProjectId, p => p.Name);
 
-        return latestMetrics.Select(m => new ProjectDriftSummaryDto(
+        return groupedMetrics.Select(m => new ProjectDriftSummaryDto(
             ProjectId: m.ProjectId,
             ProjectName: projects.GetValueOrDefault(m.ProjectId, "Unknown"),
             LatestDriftScore: m.LatestMetric.DriftScore,

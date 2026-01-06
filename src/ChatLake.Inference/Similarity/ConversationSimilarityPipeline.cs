@@ -32,10 +32,26 @@ public sealed class ConversationSimilarityPipeline
 
         var data = _mlContext.Data.LoadFromEnumerable(conversationList);
 
-        // Build TF-IDF pipeline
+        // Build TF-IDF pipeline with limited vocabulary for performance
+        var textOptions = new Microsoft.ML.Transforms.Text.TextFeaturizingEstimator.Options
+        {
+            OutputTokensColumnName = null,
+            CaseMode = Microsoft.ML.Transforms.Text.TextNormalizingEstimator.CaseMode.Lower,
+            KeepDiacritics = false,
+            KeepPunctuations = false,
+            KeepNumbers = false,
+            WordFeatureExtractor = new Microsoft.ML.Transforms.Text.WordBagEstimator.Options
+            {
+                NgramLength = 1,
+                MaximumNgramsCount = new[] { 500 } // Limit vocabulary size
+            },
+            CharFeatureExtractor = null // Disable character n-grams for speed
+        };
+
         var pipeline = _mlContext.Transforms.Text.FeaturizeText(
             outputColumnName: "Features",
-            inputColumnName: nameof(ConversationTextInput.Text));
+            options: textOptions,
+            inputColumnNames: nameof(ConversationTextInput.Text));
 
         _model = pipeline.Fit(data);
         var transformedData = _model.Transform(data);
@@ -44,6 +60,11 @@ public sealed class ConversationSimilarityPipeline
         _vectors = _mlContext.Data
             .CreateEnumerable<ConversationVector>(transformedData, reuseRowObject: false)
             .ToList();
+
+        if (_vectors.Count > 0 && _vectors[0].Features != null)
+        {
+            Console.WriteLine($"[Similarity] Vector dimensions: {_vectors[0].Features.Length}");
+        }
     }
 
     /// <summary>
@@ -56,11 +77,11 @@ public sealed class ConversationSimilarityPipeline
         if (_vectors == null || _vectors.Count < 2)
             return [];
 
-        var pairs = new List<SimilarityPair>();
-        var pairsPerConversation = new Dictionary<long, int>();
+        var minSim = (float)minSimilarity;
+        var allPairs = new System.Collections.Concurrent.ConcurrentBag<SimilarityPair>();
 
-        // Calculate pairwise similarities
-        for (int i = 0; i < _vectors.Count; i++)
+        // Parallel calculation of pairwise similarities
+        Parallel.For(0, _vectors.Count, i =>
         {
             for (int j = i + 1; j < _vectors.Count; j++)
             {
@@ -68,31 +89,38 @@ public sealed class ConversationSimilarityPipeline
                     _vectors[i].Features,
                     _vectors[j].Features);
 
-                if (similarity >= (float)minSimilarity)
+                if (similarity >= minSim)
                 {
                     var idA = _vectors[i].ConversationId;
                     var idB = _vectors[j].ConversationId;
-
-                    // Check limits per conversation
-                    var countA = pairsPerConversation.GetValueOrDefault(idA, 0);
-                    var countB = pairsPerConversation.GetValueOrDefault(idB, 0);
-
-                    if (countA >= maxPairsPerConversation && countB >= maxPairsPerConversation)
-                        continue;
 
                     // Ensure IdA < IdB
                     if (idA > idB)
                         (idA, idB) = (idB, idA);
 
-                    pairs.Add(new SimilarityPair(idA, idB, (decimal)similarity));
-
-                    pairsPerConversation[_vectors[i].ConversationId] = countA + 1;
-                    pairsPerConversation[_vectors[j].ConversationId] = countB + 1;
+                    allPairs.Add(new SimilarityPair(idA, idB, (decimal)similarity));
                 }
             }
+        });
+
+        // Apply maxPairsPerConversation limit after parallel calculation
+        var pairsPerConversation = new Dictionary<long, int>();
+        var result = new List<SimilarityPair>();
+
+        foreach (var pair in allPairs.OrderByDescending(p => p.Similarity))
+        {
+            var countA = pairsPerConversation.GetValueOrDefault(pair.ConversationIdA, 0);
+            var countB = pairsPerConversation.GetValueOrDefault(pair.ConversationIdB, 0);
+
+            if (countA >= maxPairsPerConversation && countB >= maxPairsPerConversation)
+                continue;
+
+            result.Add(pair);
+            pairsPerConversation[pair.ConversationIdA] = countA + 1;
+            pairsPerConversation[pair.ConversationIdB] = countB + 1;
         }
 
-        return pairs;
+        return result;
     }
 
     /// <summary>

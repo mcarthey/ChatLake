@@ -45,9 +45,10 @@
                         Last run: @Model.ClusteringRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
                     </p>
                 }
-                <form method="post" asp-page-handler="RunClustering">
-                    <button type="submit" class="btn btn-primary">
-                        @(Model.ClusteringRun != null ? "Re-run" : "Run") Clustering
+                <form method="post" asp-page-handler="RunClustering" class="analysis-form">
+                    <button type="submit" class="btn btn-primary analysis-btn">
+                        <span class="btn-text">@(Model.ClusteringRun != null ? "Re-run" : "Run") Clustering</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                     </button>
                 </form>
             </div>
@@ -74,9 +75,10 @@
                         Last run: @Model.TopicsRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
                     </p>
                 }
-                <form method="post" asp-page-handler="RunTopics">
-                    <button type="submit" class="btn btn-primary">
-                        @(Model.TopicsRun != null ? "Re-run" : "Run") Topic Extraction
+                <form method="post" asp-page-handler="RunTopics" class="analysis-form">
+                    <button type="submit" class="btn btn-primary analysis-btn">
+                        <span class="btn-text">@(Model.TopicsRun != null ? "Re-run" : "Run") Topic Extraction</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                     </button>
                 </form>
             </div>
@@ -97,15 +99,17 @@
             </div>
             <div class="card-body">
                 <p class="card-text">Build similarity index to find related conversations ("Have I solved this before?").</p>
+                <p class="text-warning small mb-2"><strong>Note:</strong> This can take several minutes for large datasets.</p>
                 @if (Model.SimilarityRun != null)
                 {
                     <p class="text-muted small mb-2">
                         Last run: @Model.SimilarityRun.StartedAtUtc.ToString("MMM dd, yyyy HH:mm")
                     </p>
                 }
-                <form method="post" asp-page-handler="RunSimilarity">
-                    <button type="submit" class="btn btn-primary">
-                        @(Model.SimilarityRun != null ? "Re-run" : "Run") Similarity
+                <form method="post" asp-page-handler="RunSimilarity" class="analysis-form">
+                    <button type="submit" class="btn btn-primary analysis-btn">
+                        <span class="btn-text">@(Model.SimilarityRun != null ? "Re-run" : "Run") Similarity</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                     </button>
                 </form>
             </div>
@@ -115,6 +119,25 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+document.querySelectorAll('.analysis-form').forEach(form => {
+    form.addEventListener('submit', function() {
+        const btn = this.querySelector('.analysis-btn');
+        const text = btn.querySelector('.btn-text');
+        const spinner = btn.querySelector('.spinner-border');
+
+        btn.disabled = true;
+        text.textContent = 'Running...';
+        spinner.classList.remove('d-none');
+
+        // Disable all other analysis buttons
+        document.querySelectorAll('.analysis-btn').forEach(b => b.disabled = true);
+    });
+});
+</script>
+}
 
 <div class="row">
     <div class="col">
