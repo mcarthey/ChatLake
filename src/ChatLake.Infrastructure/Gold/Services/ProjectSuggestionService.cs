@@ -223,4 +223,62 @@ public sealed class ProjectSuggestionService : IProjectSuggestionService
 
         return pending.Count;
     }
+
+    public async Task<IReadOnlyList<SuggestionRunGroup>> GetPendingSuggestionsGroupedAsync()
+    {
+        // Get pending suggestions with their run info
+        var suggestionsWithRuns = await _db.ProjectSuggestions
+            .Where(ps => ps.Status == "Pending")
+            .Join(_db.InferenceRuns,
+                ps => ps.InferenceRunId,
+                ir => ir.InferenceRunId,
+                (ps, ir) => new { Suggestion = ps, Run = ir })
+            .ToListAsync();
+
+        // Group by run
+        var groups = suggestionsWithRuns
+            .GroupBy(x => x.Run.InferenceRunId)
+            .Select(g =>
+            {
+                var run = g.First().Run;
+                var metrics = ParseRunMetrics(run.MetricsJson);
+
+                return new SuggestionRunGroup(
+                    InferenceRunId: run.InferenceRunId,
+                    RunStartedAtUtc: run.StartedAtUtc,
+                    RunCompletedAtUtc: run.CompletedAtUtc,
+                    TotalSegments: metrics.SegmentCount,
+                    ClusterCount: metrics.ClusterCount,
+                    NoiseCount: metrics.NoiseCount,
+                    Suggestions: g.Select(x => ToDto(x.Suggestion))
+                        .OrderByDescending(s => s.Confidence)
+                        .ToList());
+            })
+            .OrderByDescending(g => g.RunStartedAtUtc)
+            .ToList();
+
+        return groups;
+    }
+
+    private static (int SegmentCount, int ClusterCount, int NoiseCount) ParseRunMetrics(string? metricsJson)
+    {
+        if (string.IsNullOrEmpty(metricsJson))
+            return (0, 0, 0);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metricsJson);
+            var root = doc.RootElement;
+
+            var segmentCount = root.TryGetProperty("segmentCount", out var sc) ? sc.GetInt32() : 0;
+            var clusterCount = root.TryGetProperty("clusterCount", out var cc) ? cc.GetInt32() : 0;
+            var noiseCount = root.TryGetProperty("noiseCount", out var nc) ? nc.GetInt32() : 0;
+
+            return (segmentCount, clusterCount, noiseCount);
+        }
+        catch
+        {
+            return (0, 0, 0);
+        }
+    }
 }

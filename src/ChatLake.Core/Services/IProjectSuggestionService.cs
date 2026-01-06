@@ -39,7 +39,24 @@ public interface IProjectSuggestionService
     /// Delete all pending suggestions.
     /// </summary>
     Task<int> ClearAllPendingAsync();
+
+    /// <summary>
+    /// Get pending suggestions grouped by inference run.
+    /// </summary>
+    Task<IReadOnlyList<SuggestionRunGroup>> GetPendingSuggestionsGroupedAsync();
 }
+
+/// <summary>
+/// A group of suggestions from the same inference run.
+/// </summary>
+public sealed record SuggestionRunGroup(
+    long InferenceRunId,
+    DateTime RunStartedAtUtc,
+    DateTime? RunCompletedAtUtc,
+    int TotalSegments,
+    int ClusterCount,
+    int NoiseCount,
+    IReadOnlyList<ProjectSuggestionDto> Suggestions);
 
 public sealed record ProjectSuggestionDto(
     long ProjectSuggestionId,

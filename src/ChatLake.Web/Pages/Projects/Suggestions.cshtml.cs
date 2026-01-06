@@ -11,8 +11,9 @@ public class SuggestionsModel : PageModel
     private readonly IProjectService _projects;
     private readonly ISegmentationService _segmentation;
 
-    public IReadOnlyList<ProjectSuggestionDto> PendingSuggestions { get; private set; } = [];
+    public IReadOnlyList<SuggestionRunGroup> SuggestionGroups { get; private set; } = [];
     public IReadOnlyList<ProjectDto> ExistingProjects { get; private set; } = [];
+    public int TotalPendingCount => SuggestionGroups.Sum(g => g.Suggestions.Count);
     public string? Message { get; private set; }
     public string? ErrorMessage { get; private set; }
 
@@ -32,7 +33,7 @@ public class SuggestionsModel : PageModel
     {
         Message = message;
         ErrorMessage = error;
-        PendingSuggestions = await _suggestions.GetPendingSuggestionsAsync();
+        SuggestionGroups = await _suggestions.GetPendingSuggestionsGroupedAsync();
         ExistingProjects = await _projects.ListAsync();
     }
 

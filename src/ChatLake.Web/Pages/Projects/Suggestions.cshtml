@@ -36,11 +36,11 @@
                 Full Reset (Slow)
             </button>
         </form>
-        @if (Model.PendingSuggestions.Any())
+        @if (Model.TotalPendingCount > 0)
         {
             <form method="post" asp-page-handler="ClearAll" style="display: inline;">
                 <button type="submit" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Clear Suggestions
+                    Clear All Suggestions
                 </button>
             </form>
         }
@@ -51,96 +51,136 @@
     </div>
 </div>
 
-<h3>Pending Suggestions (@Model.PendingSuggestions.Count)</h3>
+<h3>Pending Suggestions (@Model.TotalPendingCount)</h3>
 
-@if (!Model.PendingSuggestions.Any())
+@if (!Model.SuggestionGroups.Any())
 {
     <p><em>No pending suggestions. Run clustering to analyze conversations.</em></p>
 }
 else
 {
-    <div style="display: flex; flex-direction: column; gap: 15px;">
-        @foreach (var suggestion in Model.PendingSuggestions)
-        {
-            <div style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #fafafa;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div>
-                        <h4 style="margin: 0 0 5px 0;">
-                            <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="text-decoration: none; color: inherit;">
-                                @suggestion.SuggestedName
-                            </a>
-                        </h4>
-                        <p style="margin: 0 0 5px 0; color: #666; font-size: 0.9em;">
-                            <code>@suggestion.SuggestedProjectKey</code>
-                            &nbsp;
-                            <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="font-size: 0.85em;">
-                                View conversations
-                            </a>
-                        </p>
-                        <p style="margin: 0; color: #666;">
-                            @suggestion.Summary
-                        </p>
-                    </div>
-                    <div style="text-align: right;">
-                        @if (suggestion.SegmentCount > 0)
-                        {
-                            <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
-                                @suggestion.SegmentCount segments
+    @foreach (var group in Model.SuggestionGroups)
+    {
+        var isLatest = group == Model.SuggestionGroups.First();
+        var runTime = group.RunCompletedAtUtc?.ToLocalTime() ?? group.RunStartedAtUtc.ToLocalTime();
+
+        <details open="@isLatest" style="margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+            <summary style="padding: 15px; background: @(isLatest ? "#e7f5ff" : "#f8f9fa"); cursor: pointer; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                <span>
+                    @if (isLatest)
+                    {
+                        <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-right: 8px;">Latest</span>
+                    }
+                    Run from @runTime.ToString("MMM d, yyyy h:mm tt")
+                </span>
+                <span style="font-weight: normal; color: #666;">
+                    @group.Suggestions.Count suggestions
+                    @if (group.TotalSegments > 0)
+                    {
+                        <text>&nbsp;•&nbsp;@group.TotalSegments segments&nbsp;•&nbsp;@group.NoiseCount noise</text>
+                    }
+                </span>
+            </summary>
+
+            <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+                @foreach (var suggestion in group.Suggestions)
+                {
+                    <div style="border: 1px solid #eee; padding: 15px; border-radius: 8px; background: #fafafa;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <h4 style="margin: 0 0 5px 0;">
+                                    <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="text-decoration: none; color: inherit;">
+                                        @suggestion.SuggestedName
+                                    </a>
+                                </h4>
+                                <p style="margin: 0 0 5px 0; color: #666; font-size: 0.9em;">
+                                    <code>@suggestion.SuggestedProjectKey</code>
+                                    &nbsp;
+                                    <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="font-size: 0.85em;">
+                                        View conversations
+                                    </a>
+                                </p>
+                                <p style="margin: 0; color: #666;">
+                                    @suggestion.Summary
+                                </p>
                             </div>
-                            <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
-                                from @suggestion.ConversationCount conversations
+                            <div style="text-align: right;">
+                                @if (suggestion.SegmentCount > 0)
+                                {
+                                    <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
+                                        @suggestion.SegmentCount segments
+                                    </div>
+                                    <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                        from @suggestion.ConversationCount conversations
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
+                                        @suggestion.ConversationCount conversations
+                                    </div>
+                                }
+                                <div style="font-size: 0.9em; color: @(suggestion.Confidence >= 0.7m ? "#28a745" : suggestion.Confidence >= 0.4m ? "#ffc107" : "#dc3545");">
+                                    @suggestion.Confidence.ToString("P0") confidence
+                                </div>
                             </div>
-                        }
-                        else
-                        {
-                            <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
-                                @suggestion.ConversationCount conversations
-                            </div>
-                        }
-                        <div style="font-size: 0.9em; color: @(suggestion.Confidence >= 0.7m ? "#28a745" : suggestion.Confidence >= 0.4m ? "#ffc107" : "#dc3545");">
-                            @suggestion.Confidence.ToString("P0") confidence
+                        </div>
+
+                        <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <form method="post" asp-page-handler="Accept" style="display: inline;">
+                                <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                                <button type="submit" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    Accept
+                                </button>
+                            </form>
+
+                            <form method="post" asp-page-handler="Reject" style="display: inline;">
+                                <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                                <button type="submit" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    Reject
+                                </button>
+                            </form>
+
+                            @if (Model.ExistingProjects.Any())
+                            {
+                                <form method="post" asp-page-handler="Merge" style="display: inline-flex; gap: 5px; align-items: center;">
+                                    <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
+                                    <select name="targetProjectId" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                        @foreach (var project in Model.ExistingProjects)
+                                        {
+                                            <option value="@project.ProjectId">@project.Name</option>
+                                        }
+                                    </select>
+                                    <button type="submit" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        Merge Into
+                                    </button>
+                                </form>
+                            }
                         </div>
                     </div>
-                </div>
-
-                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                    <form method="post" asp-page-handler="Accept" style="display: inline;">
-                        <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
-                        <button type="submit" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            Accept
-                        </button>
-                    </form>
-
-                    <form method="post" asp-page-handler="Reject" style="display: inline;">
-                        <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
-                        <button type="submit" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            Reject
-                        </button>
-                    </form>
-
-                    @if (Model.ExistingProjects.Any())
-                    {
-                        <form method="post" asp-page-handler="Merge" style="display: inline-flex; gap: 5px; align-items: center;">
-                            <input type="hidden" name="suggestionId" value="@suggestion.ProjectSuggestionId" />
-                            <select name="targetProjectId" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                                @foreach (var project in Model.ExistingProjects)
-                                {
-                                    <option value="@project.ProjectId">@project.Name</option>
-                                }
-                            </select>
-                            <button type="submit" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                Merge Into
-                            </button>
-                        </form>
-                    }
-                </div>
+                }
             </div>
-        }
-    </div>
+        </details>
+    }
 }
 
 <style>
     button:hover {
         opacity: 0.9;
+    }
+    details summary::-webkit-details-marker {
+        display: none;
+    }
+    details summary::before {
+        content: '▶ ';
+        display: inline-block;
+        margin-right: 5px;
+        transition: transform 0.2s;
+    }
+    details[open] summary::before {
+        content: '▼ ';
+    }
+    details summary {
+        list-style: none;
     }
 </style>
