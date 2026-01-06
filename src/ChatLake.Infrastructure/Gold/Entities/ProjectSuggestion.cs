@@ -34,8 +34,20 @@ public class ProjectSuggestion
 
     /// <summary>
     /// JSON array of conversation IDs in this cluster.
+    /// Used for backward compatibility with conversation-level clustering.
     /// </summary>
     public string ConversationIdsJson { get; set; } = "[]";
+
+    /// <summary>
+    /// JSON array of segment IDs in this cluster.
+    /// Used for segment-level clustering.
+    /// </summary>
+    public string? SegmentIdsJson { get; set; }
+
+    /// <summary>
+    /// Number of unique conversations represented by segments.
+    /// </summary>
+    public int UniqueConversationCount { get; set; }
 
     /// <summary>
     /// If accepted/merged, the resulting Project.

@@ -25,6 +25,7 @@ public class ChatLakeDbContext : DbContext
       public DbSet<ConversationArtifactMap> ConversationArtifactMaps => Set<ConversationArtifactMap>();
       public DbSet<ParsingFailure> ParsingFailures => Set<ParsingFailure>();
       public DbSet<ConversationSummary> ConversationSummaries => Set<ConversationSummary>();
+      public DbSet<ConversationSegment> ConversationSegments => Set<ConversationSegment>();
 
       // Gold tier - Projects
       public DbSet<Project> Projects => Set<Project>();
@@ -38,6 +39,7 @@ public class ChatLakeDbContext : DbContext
       public DbSet<ConversationTopic> ConversationTopics => Set<ConversationTopic>();
       public DbSet<ConversationSimilarity> ConversationSimilarities => Set<ConversationSimilarity>();
       public DbSet<BlogTopicSuggestion> BlogTopicSuggestions => Set<BlogTopicSuggestion>();
+      public DbSet<SegmentEmbedding> SegmentEmbeddings => Set<SegmentEmbedding>();
 
       // Overrides
       public DbSet<UserOverride> UserOverrides => Set<UserOverride>();
@@ -57,6 +59,7 @@ public class ChatLakeDbContext : DbContext
             modelBuilder.ApplyConfiguration(new ProjectConfiguration());
             modelBuilder.ApplyConfiguration(new ProjectConversationConfiguration());
             modelBuilder.ApplyConfiguration(new ConversationSummaryConfiguration());
+            modelBuilder.ApplyConfiguration(new ConversationSegmentConfiguration());
 
             // Gold tier configurations
             modelBuilder.ApplyConfiguration(new InferenceRunConfiguration());
@@ -67,6 +70,7 @@ public class ChatLakeDbContext : DbContext
             modelBuilder.ApplyConfiguration(new ConversationSimilarityConfiguration());
             modelBuilder.ApplyConfiguration(new BlogTopicSuggestionConfiguration());
             modelBuilder.ApplyConfiguration(new UserOverrideConfiguration());
+            modelBuilder.ApplyConfiguration(new SegmentEmbeddingConfiguration());
       }
 
       private static void ConfigureImportBatch(ModelBuilder modelBuilder)
