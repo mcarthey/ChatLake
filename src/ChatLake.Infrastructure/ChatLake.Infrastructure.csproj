@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
+    <PackageReference Include="OllamaSharp" Version="5.4.12" />
   </ItemGroup>
 
   <PropertyGroup>
