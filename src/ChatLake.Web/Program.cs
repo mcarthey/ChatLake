@@ -29,6 +29,9 @@ builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<IConversationQueryService, ConversationQueryService>();
 builder.Services.AddScoped<IConversationSummaryBuilder, ConversationSummaryBuilder>();
 builder.Services.AddScoped<IInferenceRunService, InferenceRunService>();
+builder.Services.AddSingleton<ILlmService>(new OllamaService("http://localhost:11434", "mistral:7b"));
+builder.Services.AddScoped<ISegmentationService, SegmentationService>();
+builder.Services.AddScoped<IEmbeddingCacheService, EmbeddingCacheService>();
 builder.Services.AddScoped<IClusteringService, ClusteringService>();
 builder.Services.AddScoped<IProjectSuggestionService, ProjectSuggestionService>();
 builder.Services.AddScoped<ITopicExtractionService, TopicExtractionService>();
@@ -48,6 +51,26 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 var app = builder.Build();
+
+// Clean up any stale "Running" inference runs from previous crashes
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ChatLakeDbContext>();
+    var staleRuns = await db.InferenceRuns
+        .Where(r => r.Status == "Running")
+        .ToListAsync();
+
+    if (staleRuns.Any())
+    {
+        foreach (var run in staleRuns)
+        {
+            run.Status = "Failed";
+            run.CompletedAtUtc = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"[Startup] Cleaned up {staleRuns.Count} stale 'Running' inference runs");
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

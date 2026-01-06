@@ -23,11 +23,12 @@ public sealed class ProjectSuggestionService : IProjectSuggestionService
 
     public async Task<IReadOnlyList<ProjectSuggestionDto>> GetSuggestionsByStatusAsync(string status)
     {
-        return await _db.ProjectSuggestions
+        var suggestions = await _db.ProjectSuggestions
             .Where(ps => ps.Status == status)
             .OrderByDescending(ps => ps.Confidence)
-            .Select(ps => ToDto(ps))
             .ToListAsync();
+
+        return suggestions.Select(ToDto).ToList();
     }
 
     public async Task<long> AcceptSuggestionAsync(long suggestionId)
@@ -151,8 +152,12 @@ public sealed class ProjectSuggestionService : IProjectSuggestionService
                 c.ConversationId,
                 c.FirstMessageAtUtc,
                 MessageCount = _db.Messages.Count(m => m.ConversationId == c.ConversationId),
+                // Skip profile context messages (JSON blobs starting with {) when getting title
                 FirstUserMessage = _db.Messages
-                    .Where(m => m.ConversationId == c.ConversationId && m.Role == "user")
+                    .Where(m => m.ConversationId == c.ConversationId
+                        && m.Role == "user"
+                        && m.Content != null
+                        && !m.Content.StartsWith("{"))
                     .OrderBy(m => m.SequenceIndex)
                     .Select(m => m.Content)
                     .FirstOrDefault()
@@ -187,6 +192,35 @@ public sealed class ProjectSuggestionService : IProjectSuggestionService
         Summary: ps.Summary,
         Confidence: ps.Confidence,
         Status: ps.Status,
+        SegmentCount: CountItems(ps.SegmentIdsJson),
+        ConversationCount: ps.UniqueConversationCount > 0 ? ps.UniqueConversationCount : CountItems(ps.ConversationIdsJson),
         ResolvedAtUtc: ps.ResolvedAtUtc,
         ResolvedProjectId: ps.ResolvedProjectId);
+
+    private static int CountItems(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return 0;
+        try
+        {
+            var ids = JsonSerializer.Deserialize<List<long>>(json);
+            return ids?.Count ?? 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    public async Task<int> ClearAllPendingAsync()
+    {
+        var pending = await _db.ProjectSuggestions
+            .Where(ps => ps.Status == "Pending")
+            .ToListAsync();
+
+        _db.ProjectSuggestions.RemoveRange(pending);
+        await _db.SaveChangesAsync();
+
+        return pending.Count;
+    }
 }

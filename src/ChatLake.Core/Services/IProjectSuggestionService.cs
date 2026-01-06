@@ -34,6 +34,11 @@ public interface IProjectSuggestionService
     /// Get conversation IDs that would be assigned if suggestion is accepted.
     /// </summary>
     Task<IReadOnlyList<ConversationPreviewDto>> GetSuggestionConversationsAsync(long suggestionId);
+
+    /// <summary>
+    /// Delete all pending suggestions.
+    /// </summary>
+    Task<int> ClearAllPendingAsync();
 }
 
 public sealed record ProjectSuggestionDto(
@@ -44,6 +49,8 @@ public sealed record ProjectSuggestionDto(
     string? Summary,
     decimal Confidence,
     string Status,
+    int SegmentCount,
+    int ConversationCount,
     DateTime? ResolvedAtUtc,
     long? ResolvedProjectId);
 

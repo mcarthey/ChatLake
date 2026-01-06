@@ -5,6 +5,8 @@
 
 <p>
     <a asp-page="/Projects/Index">Back to Projects</a>
+    &nbsp;|&nbsp;
+    <a asp-page="/Analysis/ClusterVisualization">Visualize Clusters</a>
 </p>
 
 @if (!string.IsNullOrEmpty(Model.Message))
@@ -21,13 +23,27 @@
     </div>
 }
 
-<div style="margin-bottom: 20px;">
+<div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
     <form method="post" asp-page-handler="RunClustering" style="display: inline;">
         <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
             Run Clustering
         </button>
     </form>
-    <span style="margin-left: 10px; color: #666;">
+    <form method="post" asp-page-handler="ResetAndCluster" style="display: inline;">
+        <button type="submit" style="padding: 10px 20px; background: #fd7e14; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                onclick="return confirm('This will delete all segments/embeddings and re-analyze from scratch. This takes a while. Continue?');">
+            Reset &amp; Re-cluster
+        </button>
+    </form>
+    @if (Model.PendingSuggestions.Any())
+    {
+        <form method="post" asp-page-handler="ClearAll" style="display: inline;">
+            <button type="submit" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Clear All Pending
+            </button>
+        </form>
+    }
+    <span style="color: #666;">
         Analyze conversations and generate project suggestions
     </span>
 </div>
@@ -46,17 +62,40 @@ else
             <div style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #fafafa;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
-                        <h4 style="margin: 0 0 5px 0;">@suggestion.SuggestedName</h4>
+                        <h4 style="margin: 0 0 5px 0;">
+                            <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="text-decoration: none; color: inherit;">
+                                @suggestion.SuggestedName
+                            </a>
+                        </h4>
                         <p style="margin: 0 0 5px 0; color: #666; font-size: 0.9em;">
                             <code>@suggestion.SuggestedProjectKey</code>
+                            &nbsp;
+                            <a asp-page="/Projects/SuggestionDetail" asp-route-id="@suggestion.ProjectSuggestionId" style="font-size: 0.85em;">
+                                View conversations
+                            </a>
                         </p>
                         <p style="margin: 0; color: #666;">
                             @suggestion.Summary
                         </p>
                     </div>
                     <div style="text-align: right;">
-                        <div style="font-size: 1.2em; font-weight: bold; color: @(suggestion.Confidence >= 0.7m ? "#28a745" : suggestion.Confidence >= 0.4m ? "#ffc107" : "#dc3545");">
-                            @(suggestion.Confidence * 100):F0% confidence
+                        @if (suggestion.SegmentCount > 0)
+                        {
+                            <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
+                                @suggestion.SegmentCount segments
+                            </div>
+                            <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                from @suggestion.ConversationCount conversations
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 5px;">
+                                @suggestion.ConversationCount conversations
+                            </div>
+                        }
+                        <div style="font-size: 0.9em; color: @(suggestion.Confidence >= 0.7m ? "#28a745" : suggestion.Confidence >= 0.4m ? "#ffc107" : "#dc3545");">
+                            @suggestion.Confidence.ToString("P0") confidence
                         </div>
                     </div>
                 </div>
