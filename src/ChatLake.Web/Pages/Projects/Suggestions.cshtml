@@ -23,29 +23,32 @@
     </div>
 }
 
-<div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-    <form method="post" asp-page-handler="RunClustering" style="display: inline;">
-        <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-            Run Clustering
-        </button>
-    </form>
-    <form method="post" asp-page-handler="ResetAndCluster" style="display: inline;">
-        <button type="submit" style="padding: 10px 20px; background: #fd7e14; color: white; border: none; border-radius: 4px; cursor: pointer;"
-                onclick="return confirm('This will delete all segments/embeddings and re-analyze from scratch. This takes a while. Continue?');">
-            Reset &amp; Re-cluster
-        </button>
-    </form>
-    @if (Model.PendingSuggestions.Any())
-    {
-        <form method="post" asp-page-handler="ClearAll" style="display: inline;">
-            <button type="submit" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Clear All Pending
+<div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+        <form method="post" asp-page-handler="RunClustering" style="display: inline;">
+            <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                Re-cluster (Fast)
             </button>
         </form>
-    }
-    <span style="color: #666;">
-        Analyze conversations and generate project suggestions
-    </span>
+        <form method="post" asp-page-handler="ResetAndCluster" style="display: inline;">
+            <button type="submit" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                    onclick="return confirm('WARNING: This deletes ALL segments and embeddings, then regenerates everything from scratch.\n\nThis takes 30-60 minutes!\n\nOnly use this if you changed segmentation rules or need to fix corrupted data.\n\nContinue?');">
+                Full Reset (Slow)
+            </button>
+        </form>
+        @if (Model.PendingSuggestions.Any())
+        {
+            <form method="post" asp-page-handler="ClearAll" style="display: inline;">
+                <button type="submit" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Clear Suggestions
+                </button>
+            </form>
+        }
+    </div>
+    <div style="font-size: 0.85em; color: #666;">
+        <strong>Re-cluster (Fast):</strong> Uses cached segments &amp; embeddings. Re-runs UMAP + HDBSCAN + naming. ~30 seconds.<br/>
+        <strong>Full Reset (Slow):</strong> Deletes everything and regenerates from scratch. ~30-60 minutes. Use sparingly!
+    </div>
 </div>
 
 <h3>Pending Suggestions (@Model.PendingSuggestions.Count)</h3>

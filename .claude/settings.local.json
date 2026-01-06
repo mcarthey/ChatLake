@@ -9,7 +9,6 @@
       "Bash(ls:*)",
       "Bash(pwd:*)",
       "Bash(mkdir:*)",
-      "Bash(mkdir -p:*)",
       "Bash(rm:*)",
       "Bash(wc:*)",
       "Bash(head:*)",
@@ -20,7 +19,12 @@
       "Bash(echo:*)",
       "Bash(curl:*)",
       "Bash(timeout:*)",
-      "WebSearch"
+      "Bash(sqlite3:*)",
+      "Bash(sqlcmd:*)",
+      "Bash(dir:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.nuget.org)"
     ]
   }
 }

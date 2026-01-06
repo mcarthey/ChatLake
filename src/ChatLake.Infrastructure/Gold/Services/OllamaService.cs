@@ -1,5 +1,6 @@
 using System.Text;
 using ChatLake.Core.Services;
+using ChatLake.Infrastructure.Logging;
 using OllamaSharp;
 
 namespace ChatLake.Infrastructure.Gold.Services;
@@ -97,7 +98,7 @@ public sealed class OllamaService : ILlmService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Ollama] Error generating name: {ex.Message}");
+            ConsoleLog.Error("Ollama", $"Error generating name: {ex.Message}");
             return $"Cluster {conversationCount}";
         }
     }
@@ -157,7 +158,7 @@ public sealed class OllamaService : ILlmService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Ollama] Error generating embedding: {ex.Message}");
+            ConsoleLog.Error("Ollama", $"Error generating embedding: {ex.Message}");
             return null;
         }
     }

@@ -8,8 +8,8 @@
 </p>
 
 <div style="margin-bottom: 15px;">
-    <button id="loadBtn" onclick="loadVisualization()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-        Generate Visualization
+    <button id="loadBtn" onclick="loadVisualization(true)" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        Refresh Visualization
     </button>
     <span id="status" style="margin-left: 10px; color: #666;"></span>
 </div>
@@ -23,126 +23,155 @@
 
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script>
-    async function loadVisualization() {
+    const CACHE_KEY = 'chatlake_visualization_cache';
+
+    // Auto-load on page visit
+    document.addEventListener('DOMContentLoaded', () => loadVisualization(false));
+
+    async function loadVisualization(forceRefresh = false) {
         const btn = document.getElementById('loadBtn');
         const status = document.getElementById('status');
         const stats = document.getElementById('stats');
 
         btn.disabled = true;
-        status.textContent = 'Loading embeddings and running UMAP (this may take a moment)...';
 
-        try {
-            const response = await fetch('/api/clustering/visualization');
-            if (!response.ok) {
-                throw new Error(await response.text());
+        let data = null;
+
+        // Try cache first (unless forcing refresh)
+        if (!forceRefresh) {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    data = JSON.parse(cached);
+                    status.textContent = 'Loaded from cache. Click "Refresh" to regenerate.';
+                }
+            } catch (e) {
+                console.warn('Cache read failed:', e);
             }
+        }
 
-            const data = await response.json();
+        // Fetch fresh data if needed
+        if (!data) {
+            status.textContent = 'Loading embeddings and running UMAP (this may take a moment)...';
+            try {
+                const response = await fetch('/api/clustering/visualization');
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                data = await response.json();
 
-            if (data.points.length === 0) {
-                status.textContent = 'No data to visualize. Run clustering first.';
+                // Cache for next time
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+                } catch (e) {
+                    console.warn('Cache write failed:', e);
+                }
+                status.textContent = 'Visualization complete!';
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                console.error(error);
                 btn.disabled = false;
                 return;
             }
+        }
 
-            // Group points by cluster
-            const clusterGroups = {};
-            data.points.forEach(p => {
-                const key = p.clusterId <= 0 ? 'noise' : `cluster_${p.clusterId}`;
-                if (!clusterGroups[key]) {
-                    clusterGroups[key] = { x: [], y: [], text: [], ids: [] };
-                }
-                clusterGroups[key].x.push(p.x);
-                clusterGroups[key].y.push(p.y);
-                clusterGroups[key].text.push(p.preview);
-                clusterGroups[key].ids.push(p.segmentId);
+        if (data.points.length === 0) {
+            status.textContent = 'No data to visualize. Run clustering first.';
+            btn.disabled = false;
+            return;
+        }
+
+        // Group points by cluster
+        const clusterGroups = {};
+        data.points.forEach(p => {
+            const key = p.clusterId <= 0 ? 'noise' : `cluster_${p.clusterId}`;
+            if (!clusterGroups[key]) {
+                clusterGroups[key] = { x: [], y: [], text: [], ids: [] };
+            }
+            clusterGroups[key].x.push(p.x);
+            clusterGroups[key].y.push(p.y);
+            clusterGroups[key].text.push(p.preview);
+            clusterGroups[key].ids.push(p.segmentId);
+        });
+
+        // Create traces for each cluster
+        const traces = [];
+        const colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+            '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
+        ];
+
+        // Add noise first (so it's in the background)
+        if (clusterGroups['noise']) {
+            traces.push({
+                x: clusterGroups['noise'].x,
+                y: clusterGroups['noise'].y,
+                text: clusterGroups['noise'].text,
+                mode: 'markers',
+                type: 'scatter',
+                name: `Noise (${clusterGroups['noise'].x.length})`,
+                marker: {
+                    size: 6,
+                    color: '#cccccc',
+                    opacity: 0.5
+                },
+                hovertemplate: '<b>Noise</b><br>%{text}<extra></extra>'
             });
+        }
 
-            // Create traces for each cluster
-            const traces = [];
-            const colors = [
-                '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-                '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-                '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5'
-            ];
-
-            // Add noise first (so it's in the background)
-            if (clusterGroups['noise']) {
+        // Add cluster traces
+        let colorIdx = 0;
+        Object.keys(clusterGroups)
+            .filter(k => k !== 'noise')
+            .sort((a, b) => {
+                const aNum = parseInt(a.split('_')[1]);
+                const bNum = parseInt(b.split('_')[1]);
+                return aNum - bNum;
+            })
+            .forEach(key => {
+                const group = clusterGroups[key];
+                const clusterName = data.clusterNames[key.split('_')[1]] || key;
                 traces.push({
-                    x: clusterGroups['noise'].x,
-                    y: clusterGroups['noise'].y,
-                    text: clusterGroups['noise'].text,
+                    x: group.x,
+                    y: group.y,
+                    text: group.text,
                     mode: 'markers',
                     type: 'scatter',
-                    name: `Noise (${clusterGroups['noise'].x.length})`,
+                    name: `${clusterName} (${group.x.length})`,
                     marker: {
-                        size: 6,
-                        color: '#cccccc',
-                        opacity: 0.5
+                        size: 8,
+                        color: colors[colorIdx % colors.length],
+                        opacity: 0.7
                     },
-                    hovertemplate: '<b>Noise</b><br>%{text}<extra></extra>'
+                    hovertemplate: `<b>${clusterName}</b><br>%{text}<extra></extra>`
                 });
+                colorIdx++;
+            });
+
+        const layout = {
+            title: 'Segment Clusters (UMAP 2D Projection)',
+            xaxis: { title: 'UMAP 1', zeroline: false },
+            yaxis: { title: 'UMAP 2', zeroline: false },
+            hovermode: 'closest',
+            showlegend: true,
+            legend: {
+                orientation: 'v',
+                x: 1.02,
+                y: 1
             }
+        };
 
-            // Add cluster traces
-            let colorIdx = 0;
-            Object.keys(clusterGroups)
-                .filter(k => k !== 'noise')
-                .sort((a, b) => {
-                    const aNum = parseInt(a.split('_')[1]);
-                    const bNum = parseInt(b.split('_')[1]);
-                    return aNum - bNum;
-                })
-                .forEach(key => {
-                    const group = clusterGroups[key];
-                    const clusterName = data.clusterNames[key.split('_')[1]] || key;
-                    traces.push({
-                        x: group.x,
-                        y: group.y,
-                        text: group.text,
-                        mode: 'markers',
-                        type: 'scatter',
-                        name: `${clusterName} (${group.x.length})`,
-                        marker: {
-                            size: 8,
-                            color: colors[colorIdx % colors.length],
-                            opacity: 0.7
-                        },
-                        hovertemplate: `<b>${clusterName}</b><br>%{text}<extra></extra>`
-                    });
-                    colorIdx++;
-                });
+        Plotly.newPlot('plot', traces, layout, { responsive: true });
 
-            const layout = {
-                title: 'Segment Clusters (UMAP 2D Projection)',
-                xaxis: { title: 'UMAP 1', zeroline: false },
-                yaxis: { title: 'UMAP 2', zeroline: false },
-                hovermode: 'closest',
-                showlegend: true,
-                legend: {
-                    orientation: 'v',
-                    x: 1.02,
-                    y: 1
-                }
-            };
-
-            Plotly.newPlot('plot', traces, layout, { responsive: true });
-
-            // Show stats
-            stats.style.display = 'block';
-            document.getElementById('statsContent').innerHTML = `
-                <p><strong>Total Segments:</strong> ${data.points.length}</p>
-                <p><strong>Clusters:</strong> ${data.clusterCount}</p>
-                <p><strong>Noise Points:</strong> ${clusterGroups['noise']?.x.length || 0} (${((clusterGroups['noise']?.x.length || 0) / data.points.length * 100).toFixed(1)}%)</p>
-                <p><strong>UMAP Time:</strong> ${data.umapDurationMs}ms</p>
-            `;
-
-            status.textContent = 'Visualization complete!';
-
-        } catch (error) {
-            status.textContent = 'Error: ' + error.message;
-            console.error(error);
-        }
+        // Show stats
+        stats.style.display = 'block';
+        document.getElementById('statsContent').innerHTML = `
+            <p><strong>Total Segments:</strong> ${data.points.length}</p>
+            <p><strong>Clusters:</strong> ${data.clusterCount}</p>
+            <p><strong>Noise Points:</strong> ${clusterGroups['noise']?.x.length || 0} (${((clusterGroups['noise']?.x.length || 0) / data.points.length * 100).toFixed(1)}%)</p>
+            <p><strong>UMAP Time:</strong> ${data.umapDurationMs}ms</p>
+        `;
 
         btn.disabled = false;
     }

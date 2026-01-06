@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using ChatLake.Core.Services;
 using ChatLake.Infrastructure.Conversations.Entities;
+using ChatLake.Infrastructure.Logging;
 using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,11 +48,11 @@ public sealed class SegmentationService : ISegmentationService
 
         if (conversationIds.Count == 0)
         {
-            Console.WriteLine("[Segmentation] No new conversations to segment");
+            ConsoleLog.Info("Segmentation", "No new conversations to segment");
             return new SegmentationResult(0, 0, 0, stopwatch.Elapsed);
         }
 
-        Console.WriteLine($"[Segmentation] Processing {conversationIds.Count} conversations...");
+        ConsoleLog.Info("Segmentation", $"Processing {conversationIds.Count} conversations...");
 
         // Start inference run
         var runId = await _inferenceRunService.StartRunAsync(
@@ -80,7 +81,7 @@ public sealed class SegmentationService : ISegmentationService
                 // Show progress every 50 conversations, or for long-running individual conversations
                 if (processed % 50 == 0 || processed == conversationIds.Count)
                 {
-                    Console.WriteLine($"[Segmentation] Progress: {processed}/{conversationIds.Count} conversations, {totalSegments} segments created");
+                    ConsoleLog.Progress("Segmentation", processed, conversationIds.Count, $"{totalSegments} segments created");
                 }
             }
 
@@ -320,11 +321,11 @@ public sealed class SegmentationService : ISegmentationService
     {
         // Delete embeddings first (foreign key constraint)
         var embeddingsDeleted = await _db.SegmentEmbeddings.ExecuteDeleteAsync(cancellationToken);
-        Console.WriteLine($"[Segmentation] Deleted {embeddingsDeleted} segment embeddings");
+        ConsoleLog.Info("Segmentation", $"Deleted {embeddingsDeleted} segment embeddings");
 
         // Delete all segments
         var segmentsDeleted = await _db.ConversationSegments.ExecuteDeleteAsync(cancellationToken);
-        Console.WriteLine($"[Segmentation] Deleted {segmentsDeleted} segments");
+        ConsoleLog.Info("Segmentation", $"Deleted {segmentsDeleted} segments");
 
         return segmentsDeleted;
     }

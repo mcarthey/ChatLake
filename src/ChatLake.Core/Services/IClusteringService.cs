@@ -44,8 +44,9 @@ public sealed record ClusteringOptions
     /// <summary>
     /// Minimum number of segments required to form a cluster.
     /// Smaller values create more clusters; larger values create fewer, denser clusters.
+    /// Default 8 balances granularity with avoiding duplicate topic clusters.
     /// </summary>
-    public int MinClusterSize { get; init; } = 5;
+    public int MinClusterSize { get; init; } = 8;
 
     /// <summary>
     /// Number of neighboring points used to determine core samples.
@@ -67,7 +68,7 @@ public sealed record ClusteringOptions
     /// <summary>
     /// Model version string for tracking.
     /// </summary>
-    public string ModelVersion { get; init; } = "3.0.0-umap-hdbscan";
+    public string ModelVersion { get; init; } = "3.1.0-umap-hdbscan";
 }
 
 /// <summary>

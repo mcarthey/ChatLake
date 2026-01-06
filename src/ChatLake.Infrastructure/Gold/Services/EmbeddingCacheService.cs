@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ChatLake.Core.Services;
 using ChatLake.Infrastructure.Conversations.Entities;
 using ChatLake.Infrastructure.Gold.Entities;
+using ChatLake.Infrastructure.Logging;
 using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -101,11 +102,11 @@ public sealed class EmbeddingCacheService : IEmbeddingCacheService
 
         if (segmentsToProcess.Count == 0)
         {
-            Console.WriteLine("[EmbeddingCache] All segments have embeddings");
+            ConsoleLog.Info("EmbeddingCache", "All segments have embeddings");
             return new EmbeddingGenerationResult(0, 0, 0, existingEmbeddings.Count, stopwatch.Elapsed);
         }
 
-        Console.WriteLine($"[EmbeddingCache] Generating embeddings for {segmentsToProcess.Count} segments...");
+        ConsoleLog.Info("EmbeddingCache", $"Generating embeddings for {segmentsToProcess.Count} segments...");
 
         // Start inference run
         var runId = await _inferenceRunService.StartRunAsync(
@@ -148,7 +149,7 @@ public sealed class EmbeddingCacheService : IEmbeddingCacheService
                 var progress = (generated * 100) / segmentsToProcess.Count;
                 if (progress >= lastReport + 10)
                 {
-                    Console.WriteLine($"[EmbeddingCache] Progress: {progress}% ({generated}/{segmentsToProcess.Count})");
+                    ConsoleLog.Progress("EmbeddingCache", generated, segmentsToProcess.Count);
                     lastReport = progress;
 
                     // Save periodically to avoid memory buildup
@@ -162,7 +163,7 @@ public sealed class EmbeddingCacheService : IEmbeddingCacheService
                 $"{{\"segmentsProcessed\":{segmentsToProcess.Count},\"embeddingsGenerated\":{generated}}}");
 
             stopwatch.Stop();
-            Console.WriteLine($"[EmbeddingCache] Generated {generated} embeddings in {stopwatch.Elapsed.TotalSeconds:F1}s");
+            ConsoleLog.Success("EmbeddingCache", $"Generated {generated} embeddings in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
             return new EmbeddingGenerationResult(
                 runId,
@@ -214,7 +215,7 @@ public sealed class EmbeddingCacheService : IEmbeddingCacheService
         {
             _db.SegmentEmbeddings.RemoveRange(staleEmbeddings);
             await _db.SaveChangesAsync(cancellationToken);
-            Console.WriteLine($"[EmbeddingCache] Invalidated {staleEmbeddings.Count} stale embeddings");
+            ConsoleLog.Warn("EmbeddingCache", $"Invalidated {staleEmbeddings.Count} stale embeddings");
         }
 
         return staleEmbeddings.Count;

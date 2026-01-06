@@ -5,6 +5,7 @@ using System.Text.Json;
 using ChatLake.Core.Services;
 using ChatLake.Inference.Clustering;
 using ChatLake.Infrastructure.Gold.Entities;
+using ChatLake.Infrastructure.Logging;
 using ChatLake.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,22 +41,22 @@ public sealed class ClusteringService : IClusteringService
         var stopwatch = Stopwatch.StartNew();
 
         // Phase 1: Segmentation
-        Console.WriteLine("[Clustering] Phase 1: Segmenting conversations...");
+        ConsoleLog.Info("Clustering", "Phase 1: Segmenting conversations...");
         var segmentationResult = await _segmentationService.SegmentConversationsAsync();
-        Console.WriteLine($"[Clustering] Created {segmentationResult.SegmentsCreated} segments from {segmentationResult.ConversationsProcessed} new conversations");
+        ConsoleLog.Success("Clustering", $"Created {segmentationResult.SegmentsCreated} segments from {segmentationResult.ConversationsProcessed} new conversations");
 
         // Phase 2: Generate embeddings for segments
-        Console.WriteLine("[Clustering] Phase 2: Generating segment embeddings...");
+        ConsoleLog.Info("Clustering", "Phase 2: Generating segment embeddings...");
         var embeddingResult = await _embeddingCacheService.GenerateMissingEmbeddingsAsync();
-        Console.WriteLine($"[Clustering] Generated {embeddingResult.EmbeddingsGenerated} new embeddings, {embeddingResult.EmbeddingsCached} cached");
+        ConsoleLog.Success("Clustering", $"Generated {embeddingResult.EmbeddingsGenerated} new embeddings, {embeddingResult.EmbeddingsCached} cached");
 
         // Phase 3: Load all segment embeddings for clustering
-        Console.WriteLine("[Clustering] Phase 3: Loading embeddings for clustering...");
+        ConsoleLog.Info("Clustering", "Phase 3: Loading embeddings for clustering...");
         var segmentEmbeddings = await _embeddingCacheService.GetAllEmbeddingsAsync();
 
         if (segmentEmbeddings.Count == 0)
         {
-            Console.WriteLine("[Clustering] No segments with embeddings to cluster");
+            ConsoleLog.Warn("Clustering", "No segments with embeddings to cluster");
             return new ClusteringResult(
                 InferenceRunId: 0,
                 SegmentCount: 0,
@@ -66,7 +67,7 @@ public sealed class ClusteringService : IClusteringService
                 Duration: stopwatch.Elapsed);
         }
 
-        Console.WriteLine($"[Clustering] Loaded {segmentEmbeddings.Count} segment embeddings");
+        ConsoleLog.Info("Clustering", $"Loaded {segmentEmbeddings.Count} segment embeddings");
 
         // Compute feature config hash
         var configHash = ComputeConfigHash(options);
@@ -83,7 +84,7 @@ public sealed class ClusteringService : IClusteringService
         try
         {
             // Phase 4: Run UMAP + HDBSCAN clustering on segment embeddings
-            Console.WriteLine("[Clustering] Phase 4: Running UMAP dimensionality reduction + HDBSCAN clustering...");
+            ConsoleLog.Info("Clustering", "Phase 4: Running UMAP dimensionality reduction + HDBSCAN clustering...");
             var embeddingInputs = segmentEmbeddings
                 .Select(e => new EmbeddingInput
                 {
@@ -104,11 +105,11 @@ public sealed class ClusteringService : IClusteringService
             var pipeline = new UmapHdbscanPipeline();
             var result = pipeline.Cluster(embeddingInputs, pipelineOptions);
 
-            Console.WriteLine($"[Clustering] UMAP+HDBSCAN found {result.ClusterCount} natural clusters");
-            Console.WriteLine($"[Clustering] {result.NoiseSegmentIds.Count} segments identified as noise (don't fit any cluster)");
+            ConsoleLog.Success("Clustering", $"UMAP+HDBSCAN found {result.ClusterCount} natural clusters");
+            ConsoleLog.Info("Clustering", $"{result.NoiseSegmentIds.Count} segments identified as noise (don't fit any cluster)");
 
             // Phase 5: Create ProjectSuggestions
-            Console.WriteLine("[Clustering] Phase 5: Creating project suggestions...");
+            ConsoleLog.Info("Clustering", "Phase 5: Creating project suggestions...");
             var suggestionsCreated = await CreateUmapHdbscanProjectSuggestionsAsync(
                 runId, result.ClusterStats, segmentEmbeddings, options.AutoAcceptThreshold);
 
@@ -136,7 +137,7 @@ public sealed class ClusteringService : IClusteringService
             await _inferenceRunService.CompleteRunAsync(runId, JsonSerializer.Serialize(metrics));
 
             stopwatch.Stop();
-            Console.WriteLine($"[Clustering] Complete: {suggestionsCreated} suggestions from {result.ClusterCount} clusters ({result.NoiseSegmentIds.Count} noise)");
+            ConsoleLog.Success("Clustering", $"Complete: {suggestionsCreated} suggestions from {result.ClusterCount} clusters ({result.NoiseSegmentIds.Count} noise) in {stopwatch.Elapsed.TotalSeconds:F1}s");
 
             return new ClusteringResult(
                 InferenceRunId: runId,
@@ -170,9 +171,9 @@ public sealed class ClusteringService : IClusteringService
         // Check if LLM is available for naming
         var useLlm = _llmService != null && await _llmService.IsAvailableAsync();
         if (useLlm)
-            Console.WriteLine("[Clustering] Using LLM for cluster naming");
+            ConsoleLog.Info("Clustering", "Using LLM for cluster naming");
         else
-            Console.WriteLine("[Clustering] LLM not available, using fallback naming");
+            ConsoleLog.Warn("Clustering", "LLM not available, using fallback naming");
 
         foreach (var cluster in clusterStats.OrderByDescending(c => c.Count))
         {
@@ -203,7 +204,7 @@ public sealed class ClusteringService : IClusteringService
                     .ToList();
 
                 suggestedName = await _llmService!.GenerateClusterNameAsync(samples, segmentIds.Count);
-                Console.WriteLine($"[Clustering] LLM named cluster {cluster.ClusterId}: \"{suggestedName}\" ({segmentIds.Count} segments, {conversationIds.Count} conversations, {cluster.Confidence:P0} confidence)");
+                ConsoleLog.Info("Clustering", $"Cluster {cluster.ClusterId}: \"{suggestedName}\" ({segmentIds.Count} segments, {conversationIds.Count} convos, {cluster.Confidence:P0})");
             }
             else
             {
