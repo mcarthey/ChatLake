@@ -14,13 +14,24 @@ public sealed class ClusteringService : IClusteringService
 {
     private readonly ChatLakeDbContext _db;
     private readonly IInferenceRunService _inferenceRunService;
+    private readonly ISegmentationService _segmentationService;
+    private readonly IEmbeddingCacheService _embeddingCacheService;
+    private readonly ILlmService? _llmService;
 
-    private const string ModelName = "ChatLake.TfIdf.KMeans";
+    private const string SegmentModelName = "ChatLake.Segments.UMAP-HDBSCAN";
 
-    public ClusteringService(ChatLakeDbContext db, IInferenceRunService inferenceRunService)
+    public ClusteringService(
+        ChatLakeDbContext db,
+        IInferenceRunService inferenceRunService,
+        ISegmentationService segmentationService,
+        IEmbeddingCacheService embeddingCacheService,
+        ILlmService? llmService = null)
     {
         _db = db;
         _inferenceRunService = inferenceRunService;
+        _segmentationService = segmentationService;
+        _embeddingCacheService = embeddingCacheService;
+        _llmService = llmService;
     }
 
     public async Task<ClusteringResult> ClusterConversationsAsync(ClusteringOptions? options = null)
@@ -28,63 +39,112 @@ public sealed class ClusteringService : IClusteringService
         options ??= new ClusteringOptions();
         var stopwatch = Stopwatch.StartNew();
 
-        // Load conversations with their message text
-        var conversationTexts = await LoadConversationTextsAsync();
+        // Phase 1: Segmentation
+        Console.WriteLine("[Clustering] Phase 1: Segmenting conversations...");
+        var segmentationResult = await _segmentationService.SegmentConversationsAsync();
+        Console.WriteLine($"[Clustering] Created {segmentationResult.SegmentsCreated} segments from {segmentationResult.ConversationsProcessed} new conversations");
 
-        if (conversationTexts.Count == 0)
+        // Phase 2: Generate embeddings for segments
+        Console.WriteLine("[Clustering] Phase 2: Generating segment embeddings...");
+        var embeddingResult = await _embeddingCacheService.GenerateMissingEmbeddingsAsync();
+        Console.WriteLine($"[Clustering] Generated {embeddingResult.EmbeddingsGenerated} new embeddings, {embeddingResult.EmbeddingsCached} cached");
+
+        // Phase 3: Load all segment embeddings for clustering
+        Console.WriteLine("[Clustering] Phase 3: Loading embeddings for clustering...");
+        var segmentEmbeddings = await _embeddingCacheService.GetAllEmbeddingsAsync();
+
+        if (segmentEmbeddings.Count == 0)
         {
+            Console.WriteLine("[Clustering] No segments with embeddings to cluster");
             return new ClusteringResult(
                 InferenceRunId: 0,
+                SegmentCount: 0,
                 ConversationCount: 0,
                 ClusterCount: 0,
                 SuggestionsCreated: 0,
+                NoiseCount: 0,
                 Duration: stopwatch.Elapsed);
         }
 
-        // Determine cluster count
-        var clusterCount = options.ClusterCount ?? CalculateOptimalClusterCount(conversationTexts.Count);
+        Console.WriteLine($"[Clustering] Loaded {segmentEmbeddings.Count} segment embeddings");
 
-        // Compute feature config hash for reproducibility
-        var configHash = ComputeConfigHash(options, clusterCount);
+        // Compute feature config hash
+        var configHash = ComputeConfigHash(options);
 
-        // Start inference run
+        // Start inference run for clustering
         var runId = await _inferenceRunService.StartRunAsync(
-            runType: "Clustering",
-            modelName: ModelName,
+            runType: "SegmentClustering",
+            modelName: SegmentModelName,
             modelVersion: options.ModelVersion,
-            inputScope: "All",
+            inputScope: "AllSegments",
             featureConfigHash: configHash,
-            inputDescription: $"Clustering {conversationTexts.Count} conversations into {clusterCount} groups");
+            inputDescription: $"UMAP→HDBSCAN clustering {segmentEmbeddings.Count} segments (umap={options.UmapDimensions}D, minClusterSize={options.MinClusterSize})");
 
         try
         {
-            // Run the ML pipeline
-            var pipeline = new ConversationClusteringPipeline(seed: 42); // Fixed seed for reproducibility
-            var result = pipeline.Cluster(conversationTexts, clusterCount, options.MaxIterations);
+            // Phase 4: Run UMAP + HDBSCAN clustering on segment embeddings
+            Console.WriteLine("[Clustering] Phase 4: Running UMAP dimensionality reduction + HDBSCAN clustering...");
+            var embeddingInputs = segmentEmbeddings
+                .Select(e => new EmbeddingInput
+                {
+                    ConversationId = e.ConversationSegmentId, // Repurpose field for segment ID
+                    Features = e.Embedding
+                })
+                .ToList();
 
-            // Create ProjectSuggestion records
-            var suggestionsCreated = await CreateProjectSuggestionsAsync(
-                runId, result.ClusterStats, conversationTexts, options.AutoAcceptThreshold);
+            var pipelineOptions = new UmapHdbscanOptions
+            {
+                UmapDimensions = options.UmapDimensions,
+                UmapNeighbors = options.UmapNeighbors,
+                MinClusterSize = options.MinClusterSize,
+                MinPoints = options.MinPoints,
+                RandomSeed = options.RandomSeed
+            };
+
+            var pipeline = new UmapHdbscanPipeline();
+            var result = pipeline.Cluster(embeddingInputs, pipelineOptions);
+
+            Console.WriteLine($"[Clustering] UMAP+HDBSCAN found {result.ClusterCount} natural clusters");
+            Console.WriteLine($"[Clustering] {result.NoiseSegmentIds.Count} segments identified as noise (don't fit any cluster)");
+
+            // Phase 5: Create ProjectSuggestions
+            Console.WriteLine("[Clustering] Phase 5: Creating project suggestions...");
+            var suggestionsCreated = await CreateUmapHdbscanProjectSuggestionsAsync(
+                runId, result.ClusterStats, segmentEmbeddings, options.AutoAcceptThreshold);
 
             // Complete the run with metrics
+            var uniqueConversations = segmentEmbeddings.Select(e => e.ConversationId).Distinct().Count();
             var metrics = new
             {
-                conversationCount = conversationTexts.Count,
-                clusterCount,
+                algorithm = "UMAP+HDBSCAN",
+                umapDimensions = options.UmapDimensions,
+                umapNeighbors = options.UmapNeighbors,
+                segmentCount = segmentEmbeddings.Count,
+                uniqueConversationCount = uniqueConversations,
+                clusterCount = result.ClusterCount,
+                noiseCount = result.NoiseSegmentIds.Count,
+                noisePercentage = Math.Round(result.NoiseSegmentIds.Count * 100.0 / segmentEmbeddings.Count, 1),
                 suggestionsCreated,
-                nonEmptyClusters = result.ClusterStats.Count(c => c.Count > 0),
-                avgClusterSize = result.ClusterStats.Where(c => c.Count > 0).Average(c => c.Count),
-                avgConfidence = result.ClusterStats.Where(c => c.Count > 0).Average(c => (double)c.Confidence)
+                avgClusterSize = result.ClusterStats.Count > 0
+                    ? result.ClusterStats.Average(c => c.Count)
+                    : 0,
+                avgConfidence = result.ClusterStats.Count > 0
+                    ? result.ClusterStats.Average(c => (double)c.Confidence)
+                    : 0
             };
 
             await _inferenceRunService.CompleteRunAsync(runId, JsonSerializer.Serialize(metrics));
 
             stopwatch.Stop();
+            Console.WriteLine($"[Clustering] Complete: {suggestionsCreated} suggestions from {result.ClusterCount} clusters ({result.NoiseSegmentIds.Count} noise)");
+
             return new ClusteringResult(
                 InferenceRunId: runId,
-                ConversationCount: conversationTexts.Count,
-                ClusterCount: clusterCount,
+                SegmentCount: segmentEmbeddings.Count,
+                ConversationCount: uniqueConversations,
+                ClusterCount: result.ClusterCount,
                 SuggestionsCreated: suggestionsCreated,
+                NoiseCount: result.NoiseSegmentIds.Count,
                 Duration: stopwatch.Elapsed);
         }
         catch (Exception ex)
@@ -92,6 +152,112 @@ public sealed class ClusteringService : IClusteringService
             await _inferenceRunService.FailRunAsync(runId, ex.Message);
             throw;
         }
+    }
+
+    private async Task<int> CreateUmapHdbscanProjectSuggestionsAsync(
+        long runId,
+        IReadOnlyList<UmapHdbscanClusterStats> clusterStats,
+        IReadOnlyList<SegmentEmbeddingData> segmentEmbeddings,
+        decimal autoAcceptThreshold)
+    {
+        var suggestionsCreated = 0;
+
+        // Build lookup from segment ID to conversation ID
+        var segmentToConversation = segmentEmbeddings.ToDictionary(
+            e => e.ConversationSegmentId,
+            e => e.ConversationId);
+
+        // Check if LLM is available for naming
+        var useLlm = _llmService != null && await _llmService.IsAvailableAsync();
+        if (useLlm)
+            Console.WriteLine("[Clustering] Using LLM for cluster naming");
+        else
+            Console.WriteLine("[Clustering] LLM not available, using fallback naming");
+
+        foreach (var cluster in clusterStats.OrderByDescending(c => c.Count))
+        {
+            var segmentIds = cluster.SegmentIds;
+
+            // Get unique conversation IDs for these segments
+            var conversationIds = segmentIds
+                .Where(sid => segmentToConversation.ContainsKey(sid))
+                .Select(sid => segmentToConversation[sid])
+                .Distinct()
+                .ToList();
+
+            // Load segment content for naming
+            var segmentContents = await _db.ConversationSegments
+                .Where(s => segmentIds.Contains(s.ConversationSegmentId))
+                .Select(s => new { s.ConversationSegmentId, s.ContentText })
+                .ToListAsync();
+
+            // Generate name
+            string suggestedName;
+            if (useLlm && segmentContents.Count > 0)
+            {
+                // Sample more segments for better theme detection
+                var samples = segmentContents
+                    .OrderBy(_ => Guid.NewGuid())
+                    .Take(12)
+                    .Select(s => s.ContentText.Length > 1000 ? s.ContentText[..1000] : s.ContentText)
+                    .ToList();
+
+                suggestedName = await _llmService!.GenerateClusterNameAsync(samples, segmentIds.Count);
+                Console.WriteLine($"[Clustering] LLM named cluster {cluster.ClusterId}: \"{suggestedName}\" ({segmentIds.Count} segments, {conversationIds.Count} conversations, {cluster.Confidence:P0} confidence)");
+            }
+            else
+            {
+                suggestedName = $"Topic {cluster.ClusterId}";
+            }
+
+            var suggestedKey = GenerateProjectKey(suggestedName);
+
+            // Generate summary
+            var samplePreviews = segmentContents
+                .Take(3)
+                .Select(s => CleanPreview(s.ContentText))
+                .Where(p => !string.IsNullOrEmpty(p))
+                .ToList();
+
+            var summary = samplePreviews.Count > 0
+                ? $"{segmentIds.Count} segments from {conversationIds.Count} conversations. Samples: {string.Join("; ", samplePreviews)}"
+                : $"{segmentIds.Count} segments from {conversationIds.Count} conversations";
+
+            var suggestion = new ProjectSuggestion
+            {
+                InferenceRunId = runId,
+                SuggestedProjectKey = suggestedKey,
+                SuggestedName = suggestedName,
+                Summary = summary,
+                Confidence = cluster.Confidence,
+                Status = cluster.Confidence >= autoAcceptThreshold ? "Accepted" : "Pending",
+                ConversationIdsJson = JsonSerializer.Serialize(conversationIds),
+                SegmentIdsJson = JsonSerializer.Serialize(segmentIds),
+                UniqueConversationCount = conversationIds.Count
+            };
+
+            _db.ProjectSuggestions.Add(suggestion);
+            suggestionsCreated++;
+        }
+
+        await _db.SaveChangesAsync();
+        return suggestionsCreated;
+    }
+
+    private static string CleanPreview(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return "";
+
+        // Skip JSON-like content
+        var trimmed = content.TrimStart();
+        if (trimmed.StartsWith("{") || trimmed.StartsWith("[")) return "";
+
+        // Get first line or first 80 chars
+        var firstLine = content.Split('\n').FirstOrDefault()?.Trim() ?? "";
+        if (firstLine.Length > 80)
+            firstLine = firstLine[..80] + "...";
+
+        return firstLine;
     }
 
     public async Task<IReadOnlyList<ClusterSummary>> GetClusterSummariesAsync(long inferenceRunId)
@@ -105,122 +271,21 @@ public sealed class ClusteringService : IClusteringService
 
         foreach (var suggestion in suggestions)
         {
-            // Get sample conversation IDs for this suggestion
-            // For now, return empty - would need a mapping table to track which conversations belong to which suggestion
+            var segmentIds = !string.IsNullOrEmpty(suggestion.SegmentIdsJson)
+                ? JsonSerializer.Deserialize<List<long>>(suggestion.SegmentIdsJson) ?? []
+                : [];
+
             result.Add(new ClusterSummary(
                 ProjectSuggestionId: suggestion.ProjectSuggestionId,
                 SuggestedName: suggestion.SuggestedName,
                 SuggestedProjectKey: suggestion.SuggestedProjectKey,
-                ConversationCount: 0, // Would need to store this
+                ConversationCount: suggestion.UniqueConversationCount,
                 Confidence: suggestion.Confidence,
                 Status: suggestion.Status,
-                SampleConversationIds: Array.Empty<long>()));
+                SampleConversationIds: segmentIds.Take(5).ToArray()));
         }
 
         return result;
-    }
-
-    private async Task<List<ConversationTextInput>> LoadConversationTextsAsync()
-    {
-        // Load conversations that aren't already assigned to a project
-        var assignedConversationIds = await _db.ProjectConversations
-            .Where(pc => pc.IsCurrent)
-            .Select(pc => pc.ConversationId)
-            .ToListAsync();
-
-        var conversations = await _db.Conversations
-            .Where(c => !assignedConversationIds.Contains(c.ConversationId))
-            .Select(c => new { c.ConversationId })
-            .ToListAsync();
-
-        var result = new List<ConversationTextInput>();
-
-        foreach (var conv in conversations)
-        {
-            var messages = await _db.Messages
-                .Where(m => m.ConversationId == conv.ConversationId)
-                .OrderBy(m => m.SequenceIndex)
-                .Select(m => new { m.Role, m.Content })
-                .ToListAsync();
-
-            if (messages.Count == 0)
-                continue;
-
-            // Concatenate all message content
-            var text = string.Join("\n\n", messages.Select(m => m.Content));
-
-            // Get title from first user message
-            var title = messages
-                .FirstOrDefault(m => m.Role == "user")?.Content
-                .Split('\n').FirstOrDefault()?.Trim();
-
-            if (title?.Length > 100)
-                title = title[..100];
-
-            result.Add(new ConversationTextInput
-            {
-                ConversationId = conv.ConversationId,
-                Text = text,
-                Title = title
-            });
-        }
-
-        return result;
-    }
-
-    private async Task<int> CreateProjectSuggestionsAsync(
-        long runId,
-        IReadOnlyList<ClusterStats> clusterStats,
-        List<ConversationTextInput> conversationTexts,
-        decimal autoAcceptThreshold)
-    {
-        var suggestionsCreated = 0;
-
-        foreach (var cluster in clusterStats.Where(c => c.Count > 0))
-        {
-            // Generate cluster name from sample conversations
-            var sampleIds = cluster.ConversationIds.Take(5).ToList();
-            var sampleTitles = conversationTexts
-                .Where(c => sampleIds.Contains(c.ConversationId))
-                .Select(c => c.Title)
-                .Where(t => !string.IsNullOrEmpty(t))
-                .Take(3)
-                .ToList();
-
-            var suggestedName = GenerateClusterName(sampleTitles, cluster.ClusterId);
-            var suggestedKey = GenerateProjectKey(suggestedName);
-
-            var suggestion = new ProjectSuggestion
-            {
-                InferenceRunId = runId,
-                SuggestedProjectKey = suggestedKey,
-                SuggestedName = suggestedName,
-                Summary = $"Cluster of {cluster.Count} related conversations",
-                Confidence = cluster.Confidence,
-                Status = cluster.Confidence >= autoAcceptThreshold ? "Accepted" : "Pending",
-                ConversationIdsJson = JsonSerializer.Serialize(cluster.ConversationIds)
-            };
-
-            _db.ProjectSuggestions.Add(suggestion);
-            suggestionsCreated++;
-        }
-
-        await _db.SaveChangesAsync();
-        return suggestionsCreated;
-    }
-
-    private static string GenerateClusterName(List<string?> sampleTitles, uint clusterId)
-    {
-        if (sampleTitles.Count > 0 && !string.IsNullOrEmpty(sampleTitles[0]))
-        {
-            // Use first title as base, truncate if needed
-            var baseName = sampleTitles[0]!;
-            if (baseName.Length > 50)
-                baseName = baseName[..50] + "...";
-            return baseName;
-        }
-
-        return $"Cluster {clusterId}";
     }
 
     private static string GenerateProjectKey(string name)
@@ -232,29 +297,23 @@ public sealed class ClusteringService : IClusteringService
 
         slug = new string(slug.Where(c => char.IsLetterOrDigit(c) || c == '-').ToArray());
 
-        // Truncate and add timestamp for uniqueness
         if (slug.Length > 50)
             slug = slug[..50];
 
         return $"{slug}-{DateTime.UtcNow:yyyyMMddHHmmss}";
     }
 
-    private static int CalculateOptimalClusterCount(int conversationCount)
-    {
-        // Heuristic: sqrt(n/2) gives reasonable cluster count
-        var k = (int)Math.Ceiling(Math.Sqrt(conversationCount / 2.0));
-        return Math.Max(2, Math.Min(k, 100)); // Clamp between 2 and 100
-    }
-
-    private static byte[] ComputeConfigHash(ClusteringOptions options, int clusterCount)
+    private static byte[] ComputeConfigHash(ClusteringOptions options)
     {
         var config = JsonSerializer.Serialize(new
         {
-            modelName = ModelName,
+            algorithm = "UMAP+HDBSCAN",
             modelVersion = options.ModelVersion,
-            clusterCount,
-            maxIterations = options.MaxIterations,
-            seed = 42
+            umapDimensions = options.UmapDimensions,
+            umapNeighbors = options.UmapNeighbors,
+            minClusterSize = options.MinClusterSize,
+            minPoints = options.MinPoints,
+            randomSeed = options.RandomSeed
         });
 
         return SHA256.HashData(Encoding.UTF8.GetBytes(config));
