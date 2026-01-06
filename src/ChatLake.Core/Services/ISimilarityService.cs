@@ -46,12 +46,12 @@ public sealed record SimilarityOptions
     /// <summary>
     /// Method for similarity calculation.
     /// </summary>
-    public SimilarityMethod Method { get; init; } = SimilarityMethod.TfidfCosine;
+    public SimilarityMethod Method { get; init; } = SimilarityMethod.SegmentEmbedding;
 
     /// <summary>
     /// Model version string for tracking.
     /// </summary>
-    public string ModelVersion { get; init; } = "1.0.0";
+    public string ModelVersion { get; init; } = "2.0.0-segment-embedding";
 }
 
 /// <summary>
@@ -60,9 +60,14 @@ public sealed record SimilarityOptions
 public enum SimilarityMethod
 {
     /// <summary>
-    /// TF-IDF weighted cosine similarity.
+    /// TF-IDF weighted cosine similarity (keyword-based).
     /// </summary>
-    TfidfCosine
+    TfidfCosine,
+
+    /// <summary>
+    /// Segment embedding cosine similarity (semantic, uses Ollama embeddings).
+    /// </summary>
+    SegmentEmbedding
 }
 
 /// <summary>

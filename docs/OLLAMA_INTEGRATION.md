@@ -2,36 +2,61 @@
 
 > Draft for blog post at https://learnedgeek.com/Blog
 
+**Last Updated:** 2026-01-07
+
 ## Overview
 
-ChatLake uses local LLMs via [Ollama](https://ollama.com) for two key tasks:
-1. **Semantic Embeddings** - Converting conversation text into meaning-vectors
-2. **Cluster Naming** - Generating human-readable names for conversation groups
+ChatLake uses local LLMs via [Ollama](https://ollama.com) for three key tasks:
+1. **Semantic Embeddings** - Converting text into 768-dimensional meaning-vectors
+2. **Topic Segmentation** - Splitting conversations into coherent chunks using embedding similarity
+3. **Cluster Naming** - Generating human-readable names for segment groups
 
-## Architecture
+## Architecture (UMAP + HDBSCAN Pipeline)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        ChatLake                                  │
-├─────────────────────────────────────────────────────────────────┤
-│  ClusteringService                                               │
-│    │                                                             │
-│    ├── 1. Load conversations from DB                            │
-│    │                                                             │
-│    ├── 2. Generate embeddings (ILlmService)                     │
-│    │      └── OllamaService.GenerateEmbeddingAsync()            │
-│    │          └── POST http://localhost:11434/api/embed         │
-│    │              Model: nomic-embed-text (768 dimensions)      │
-│    │                                                             │
-│    ├── 3. Cluster embeddings (ML.NET KMeans)                    │
-│    │      └── Groups similar vectors together                   │
-│    │                                                             │
-│    └── 4. Name clusters (ILlmService)                           │
-│           └── OllamaService.GenerateClusterNameAsync()          │
-│               └── POST http://localhost:11434/api/generate      │
-│                   Model: mistral:7b                             │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ChatLake ML Pipeline                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. SEGMENTATION PHASE (SegmentationService)                                │
+│     └── Load conversations without segments                                  │
+│     └── Generate sliding window embeddings (Ollama nomic-embed-text)        │
+│     └── Detect topic boundaries (cosine similarity < 0.55)                  │
+│     └── Create ConversationSegment records                                  │
+│                                                                              │
+│  2. EMBEDDING PHASE (EmbeddingCacheService)                                 │
+│     └── Load segments without embeddings                                    │
+│     └── Generate 768-dim vectors (Ollama nomic-embed-text)                  │
+│     └── Cache in SegmentEmbedding table                                     │
+│     └── Hash-based invalidation for changes                                 │
+│                                                                              │
+│  3. CLUSTERING PHASE (UmapHdbscanPipeline)                                  │
+│     └── Load all segment embeddings                                          │
+│     └── UMAP dimensionality reduction (768D → 15D)                          │
+│     └── HDBSCAN density-based clustering (MinClusterSize=8)                 │
+│     └── Identify noise points (don't force-fit into clusters)              │
+│                                                                              │
+│  4. NAMING PHASE (OllamaService)                                            │
+│     └── Sample 12 segments per cluster                                      │
+│     └── LLM generates common theme name (mistral:7b)                        │
+│     └── Create ProjectSuggestion records                                    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Why UMAP + HDBSCAN?
+
+This is the **BERTopic** approach - industry standard for topic modeling:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| TF-IDF + KMeans | Fast, simple | Poor clusters, no semantic understanding |
+| UMAP + HDBSCAN | Semantic clusters, handles noise, no k needed | Slower, requires embeddings |
+
+**Key advantages:**
+- **UMAP** preserves semantic neighborhoods during dimensionality reduction
+- **HDBSCAN** finds natural cluster boundaries without forcing a cluster count
+- **Noise handling** - segments that don't fit are marked as noise, not forced into bad clusters
 
 ## Ollama API Endpoints Used
 
@@ -39,7 +64,7 @@ ChatLake uses local LLMs via [Ollama](https://ollama.com) for two key tasks:
 ```http
 GET http://localhost:11434/api/tags
 ```
-Used to check if required models are installed.
+Used to verify required models are installed.
 
 ### 2. Generate Embeddings
 ```http
@@ -59,10 +84,10 @@ Content-Type: application/json
 }
 ```
 
-**Key Limitations:**
+**Context Limits:**
 - `nomic-embed-text` has ~2048 token context (~6000 characters)
-- Longer texts must be truncated
-- Currently truncating to 5000 characters
+- Segments are truncated to 4000 characters
+- Sliding windows truncated to 3000 characters
 
 ### 3. Generate Text (Streaming)
 ```http
@@ -79,14 +104,6 @@ Content-Type: application/json
 }
 ```
 
-**Response (streamed):**
-```json
-{"response": "Word"}
-{"response": " by"}
-{"response": " word"}
-{"done": true}
-```
-
 ## Models Used
 
 | Model | Purpose | Size | Dimensions |
@@ -94,96 +111,94 @@ Content-Type: application/json
 | `nomic-embed-text` | Semantic embeddings | 274 MB | 768 |
 | `mistral:7b` | Cluster naming | 4.1 GB | N/A |
 
+## Data Model
+
+### ConversationSegment (Silver tier)
+Topic-coherent chunks within conversations:
+```
+- ConversationSegmentId (PK)
+- ConversationId (FK → Conversation)
+- SegmentIndex (position within conversation)
+- StartMessageIndex, EndMessageIndex
+- MessageCount
+- ContentHash (SHA-256 for change detection)
+- CreatedAtUtc
+```
+
+### SegmentEmbedding (Gold tier)
+Cached 768-dimensional vectors:
+```
+- SegmentEmbeddingId (PK)
+- ConversationSegmentId (FK)
+- EmbeddingModel ("nomic-embed-text")
+- Dimensions (768)
+- EmbeddingVector (binary, 3072 bytes)
+- SourceContentHash (for cache invalidation)
+```
+
 ## Current Implementation
 
-### OllamaService.cs
+### Key Services
+
+| Service | Purpose |
+|---------|---------|
+| `OllamaService` | Low-level Ollama API wrapper |
+| `SegmentationService` | Splits conversations using embedding similarity |
+| `EmbeddingCacheService` | Manages segment embedding storage |
+| `ClusteringService` | Orchestrates full pipeline |
+| `UmapHdbscanPipeline` | UMAP reduction + HDBSCAN clustering |
+
+### Segmentation Algorithm (Sliding Window)
 
 ```csharp
-public sealed class OllamaService : ILlmService
+// For each conversation:
+1. Load messages (filter profile context, system messages)
+2. Create sliding windows of N messages (default: 4)
+3. Generate embedding for each window
+4. Calculate cosine similarity between consecutive windows
+5. When similarity < 0.55, mark as segment boundary
+6. Minimum segment: 3 messages
+7. Maximum segment: 50 messages (force split)
+```
+
+### UMAP Configuration
+
+```csharp
+var umap = new Umap(
+    distance: DistanceFunction.CosineDistance,
+    dimensions: 15,        // Reduce from 768 to 15
+    numberOfNeighbors: 15,
+    minimumDistance: 0.1f,
+    random: new Random(42) // Deterministic
+);
+```
+
+### HDBSCAN Configuration
+
+```csharp
+var hdbscan = new HdbscanRunner(new HdbscanParameters<double[]>
 {
-    private readonly OllamaApiClient _client;
-    private readonly string _model = "mistral:7b";
-    private readonly string _embeddingModel = "nomic-embed-text";
-
-    // Generate embedding for a conversation
-    public async Task<float[]?> GenerateEmbeddingAsync(string text, CancellationToken ct)
-    {
-        var truncated = TruncateText(text, 5000);
-        var response = await _client.EmbedAsync(new EmbedRequest
-        {
-            Model = _embeddingModel,
-            Input = [truncated]
-        }, ct);
-
-        return response?.Embeddings?[0]?.Select(d => (float)d).ToArray();
-    }
-
-    // Generate a name for a cluster of conversations
-    public async Task<string> GenerateClusterNameAsync(
-        IReadOnlyList<string> samples,
-        int count,
-        CancellationToken ct)
-    {
-        var prompt = BuildNamingPrompt(samples, count);
-        var response = new StringBuilder();
-
-        await foreach (var chunk in _client.GenerateAsync(...))
-        {
-            response.Append(chunk.Response);
-        }
-
-        return CleanupResponse(response.ToString());
-    }
-}
+    MinPoints = 5,
+    MinClusterSize = 8,  // Tuned from 5 to reduce duplicates
+    DistanceFunction = new CosineDistance()
+});
 ```
-
-## Known Issues & Future Improvements
-
-### Issue 1: Context Length Errors
-Some conversations exceed the embedding model's context window.
-
-**Current Mitigation:** Truncate to 5000 characters
-**Future Fix:** Chunk long conversations and embed segments separately
-
-### Issue 2: Generic Cluster Names ("User Profile")
-The LLM sometimes returns generic names, possibly because:
-- Conversation text includes role markers ("user:", "assistant:")
-- Similar patterns across different topic clusters
-
-**Future Fix:**
-- Strip role markers before embedding/naming
-- Use more specific prompting
-- Consider few-shot examples
-
-### Issue 3: Topic Drift Within Conversations
-Long conversations often cover multiple topics, but current approach treats each conversation as one unit.
-
-**Future Architecture:**
-```
-Current:  Conversation → Single Embedding → Cluster
-Future:   Conversation → Split into Segments → Multiple Embeddings → Cluster Segments
-```
-
-This would allow:
-- Finding topics that span conversations
-- Better handling of long, multi-topic chats
-- More granular project suggestions
 
 ## Performance Characteristics
 
-| Operation | Time (1293 conversations) |
-|-----------|---------------------------|
-| Load from DB | ~2 seconds |
-| Generate embeddings | ~5-10 minutes |
-| KMeans clustering | ~1 second |
-| Generate 12 cluster names | ~30 seconds |
+| Operation | Duration | Notes |
+|-----------|----------|-------|
+| Full Reset (all phases) | 30-60 min | Regenerates segments + embeddings |
+| Re-cluster (Fast) | ~30 sec | Uses cached embeddings |
+| Visualization | ~4 sec | UMAP to 2D + Plotly render |
 
-**Bottleneck:** Embedding generation (sequential API calls)
+**Current Dataset:**
+- 1,293 conversations
+- ~1,624 segments
+- 56 clusters (MinClusterSize=8)
+- ~400 noise segments (24.6%)
 
-**Optimization Ideas:**
-- Batch embedding requests (Ollama supports arrays)
-- Parallel embedding with multiple model instances
-- Cache embeddings in database
+**Bottleneck:** Embedding generation during Full Reset (sequential Ollama calls)
 
 ## Setup Instructions
 
@@ -211,61 +226,44 @@ cd src/ChatLake.Web
 dotnet run
 ```
 
-## Future: Topic Segmentation (Topic Drift)
+## Cluster Naming Prompt
 
-### The Problem
-Long conversations often cover multiple topics. Currently we treat each conversation as one unit:
-
-```
-Conversation 1: "3D printing → Recipe for dinner → Unity game bug"
-                     ↓
-              Single embedding (mixed topics)
-                     ↓
-              Confused clustering
-```
-
-### The Solution: Segment-Level Analysis
-
-Instead of embedding whole conversations, split them into topic segments:
+The LLM names clusters by finding common themes:
 
 ```
-Conversation 1: "3D printing → Recipe for dinner → Unity game bug"
-                     ↓
-        Split into 3 segments (by topic shift detection)
-                     ↓
-Segment 1: "3D printing"     → Embedding → Cluster A (3D Printing)
-Segment 2: "Recipe"          → Embedding → Cluster B (Cooking)
-Segment 3: "Unity game bug"  → Embedding → Cluster C (Game Dev)
+You are an expert at identifying themes. Below are 12 text snippets
+from a cluster of 45 conversation segments. Find ONE common theme
+that connects them. Respond with ONLY a 2-5 word label, no explanation.
+
+Sample 1: "..."
+Sample 2: "..."
+...
 ```
 
-### Implementation Approach
+## Known Issues & Mitigations
 
-1. **Topic Shift Detection**
-   - Use embedding similarity between adjacent message groups
-   - When similarity drops below threshold, mark as new segment
-   - Or use LLM to identify topic boundaries
+### Issue 1: Duplicate Cluster Names
+Some clusters get similar names (e.g., multiple "Black Ember" clusters).
 
-2. **New Data Model**
-   ```
-   Conversation (1) ──→ (many) ConversationSegment
-                              ├── StartMessageIndex
-                              ├── EndMessageIndex
-                              ├── EmbeddingVector
-                              └── TopicLabel
-   ```
+**Mitigation:** Increased MinClusterSize from 5 to 8 (reduced 85 → 56 clusters)
 
-3. **Benefits**
-   - Find all segments about "3D printing" across ALL conversations
-   - Better blog topic suggestions (pull related segments together)
-   - Answer "Have I solved this before?" more accurately
-   - Handle topic drift naturally
+### Issue 2: Noise Segments (~25%)
+Some segments don't cluster well.
 
-### Blog Topics from Segments
+**Why it's okay:** HDBSCAN is designed to identify noise rather than force-fit.
+These are often one-off topics or short conversations.
 
-With segment-level analysis, we can:
-1. Find all segments about a topic (e.g., "Raspberry Pi GPIO")
-2. Rank by depth/quality of discussion
-3. Suggest: "You have 15 segments discussing GPIO - write a blog post?"
+### Issue 3: Context Length Errors
+Some segments exceed embedding model's context window.
+
+**Mitigation:** Truncate segment content to 4000 characters
+
+## Future Improvements
+
+1. **Similarity Detection** - Use segment embeddings to find "Have I solved this before?"
+2. **Blog Topic Suggestions** - Identify clusters suitable for blog posts
+3. **Batch Embedding** - Parallel Ollama calls for faster Full Reset
+4. **Drift Detection** - Track topic changes over time within projects
 
 ## References
 
@@ -273,3 +271,6 @@ With segment-level analysis, we can:
 - [OllamaSharp NuGet Package](https://www.nuget.org/packages/OllamaSharp)
 - [nomic-embed-text Model](https://ollama.com/library/nomic-embed-text)
 - [Mistral 7B Model](https://ollama.com/library/mistral)
+- [UMAP Algorithm](https://umap-learn.readthedocs.io/)
+- [HDBSCAN Algorithm](https://hdbscan.readthedocs.io/)
+- [BERTopic](https://maartengr.github.io/BERTopic/) (inspiration for this approach)

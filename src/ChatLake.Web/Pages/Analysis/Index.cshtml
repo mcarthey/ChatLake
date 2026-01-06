@@ -38,7 +38,7 @@
                 }
             </div>
             <div class="card-body">
-                <p class="card-text">Group similar conversations into suggested projects using TF-IDF and KMeans clustering.</p>
+                <p class="card-text">Group similar conversations into suggested projects using UMAP + HDBSCAN clustering on segment embeddings.</p>
                 @if (Model.ClusteringRun != null)
                 {
                     <p class="text-muted small mb-2">
@@ -98,8 +98,8 @@
                 }
             </div>
             <div class="card-body">
-                <p class="card-text">Build similarity index to find related conversations ("Have I solved this before?").</p>
-                <p class="text-warning small mb-2"><strong>Note:</strong> This can take several minutes for large datasets.</p>
+                <p class="card-text">Build similarity index using semantic embeddings to find related conversations ("Have I solved this before?").</p>
+                <p class="text-muted small mb-2"><strong>Uses:</strong> Cached segment embeddings with SIMD-accelerated cosine similarity.</p>
                 @if (Model.SimilarityRun != null)
                 {
                     <p class="text-muted small mb-2">

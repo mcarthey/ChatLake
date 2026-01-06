@@ -1,8 +1,11 @@
 # Phase 2 Execution Plan: ML Analysis + UI Improvements
 
-**Status:** Planning
+**Status:** IN PROGRESS (with architectural changes)
 **Prerequisite:** Phase 1 Complete (200MB import successful, streaming pipeline, progress tracking)
 **Goal:** Implement Gold tier ML features with concurrent UI improvements
+
+> **Note:** Implementation diverged from original plan. See `IMPLEMENTATION_STATUS.md` for details.
+> Key change: Replaced ML.NET TF-IDF + KMeans with Ollama embeddings + UMAP + HDBSCAN.
 
 ---
 
@@ -54,36 +57,40 @@ UI TRACK (parallel with ML)
 
 ## Phase 2A: Foundation (Must Complete First)
 
-### DB-GOLD — Gold Tier Schema Migration
+### DB-GOLD — Gold Tier Schema Migration ✅ COMPLETE
 
 **Objective:** Create all Gold tier tables from MSSQL_SCHEMA.md
 
-**Tables to create:**
-1. `InferenceRun` - ML execution tracking
-2. `Project` - User/system projects
-3. `ProjectConversation` - Conversation ↔ Project mapping
-4. `ProjectSuggestion` - Clustering inbox
-5. `Topic` - Extracted topics
-6. `ConversationTopic` - Topic assignments
-7. `ProjectDriftMetric` - Topic creep scores
-8. `ConversationSimilarity` - Related conversations
-9. `BlogTopicSuggestion` - Publishing candidates
+**Tables created:**
+1. `InferenceRun` - ML execution tracking ✅
+2. `Project` - User/system projects ✅
+3. `ProjectConversation` - Conversation ↔ Project mapping ✅
+4. `ProjectSuggestion` - Clustering inbox ✅
+5. `Topic` - Extracted topics ✅
+6. `ConversationTopic` - Topic assignments ✅
+7. `ProjectDriftMetric` - Topic creep scores ✅
+8. `ConversationSimilarity` - Related conversations ✅
+9. `BlogTopicSuggestion` - Publishing candidates ✅
+
+**Additional tables (not in original plan):**
+10. `ConversationSegment` - Topic-coherent chunks ✅
+11. `SegmentEmbedding` - Cached 768-dim vectors ✅
 
 **Tasks:**
-- [ ] Create EF Core entities in `ChatLake.Infrastructure/Gold/Entities/`
-- [ ] Add DbSet properties to ChatLakeDbContext
-- [ ] Configure relationships and indexes in OnModelCreating
-- [ ] Generate and apply migration
-- [ ] Verify schema matches MSSQL_SCHEMA.md exactly
+- [x] Create EF Core entities in `ChatLake.Infrastructure/Gold/Entities/`
+- [x] Add DbSet properties to ChatLakeDbContext
+- [x] Configure relationships and indexes in OnModelCreating
+- [x] Generate and apply migration
+- [x] Verify schema matches MSSQL_SCHEMA.md exactly
 
-**DoD:**
-- All 9 Gold tables exist with proper FKs, indexes, constraints
+**DoD:** ✅ COMPLETE
+- All 11 Gold tables exist with proper FKs, indexes, constraints
 - Migration is reversible
 - No breaking changes to existing Bronze/Silver tables
 
 ---
 
-### ML-01 — InferenceRun Framework
+### ML-01 — InferenceRun Framework ✅ COMPLETE
 
 **Objective:** Standardize ML execution tracking so all derived data is traceable
 
@@ -99,27 +106,17 @@ ChatLake.Infrastructure/
       InferenceRunService.cs
 ```
 
-**Interface:**
-```csharp
-public interface IInferenceRunService
-{
-    Task<long> StartRunAsync(string runType, string modelName, string modelVersion,
-        string inputScope, string? inputDescription = null);
-    Task CompleteRunAsync(long runId, string? metricsJson = null);
-    Task FailRunAsync(long runId, string errorMessage);
-    Task<InferenceRun?> GetRunAsync(long runId);
-    Task<IReadOnlyList<InferenceRun>> GetRecentRunsAsync(string? runType = null, int limit = 20);
-}
-```
+**Interface:** ✅ Implemented as planned
 
-**RunTypes to support:**
-- `Clustering` - KMeans project grouping
-- `Topics` - Topic extraction
-- `Similarity` - Conversation similarity edges
-- `Drift` - Topic drift calculation
-- `BlogTopics` - Blog suggestion generation
+**RunTypes implemented:**
+- `Segmentation` - Topic-coherent segment creation ✅
+- `Embedding` - Vector generation via Ollama ✅
+- `SegmentClustering` - UMAP + HDBSCAN clustering ✅
+- `Topics` - Topic extraction (stub)
+- `Similarity` - Conversation similarity edges (stub)
+- `Drift` - Topic drift calculation (stub)
 
-**DoD:**
+**DoD:** ✅ COMPLETE
 - InferenceRun rows created for every ML operation
 - Status transitions: Running → Completed | Failed
 - Metrics stored as JSON for analysis
@@ -128,107 +125,136 @@ public interface IInferenceRunService
 
 ## Phase 2B: Core ML Features
 
-### ML-02 — Baseline Conversation Clustering
+### ML-02 — Baseline Conversation Clustering ✅ COMPLETE (Architecture Changed)
 
 **Objective:** Auto-group conversations into suggested projects
 
-**Approach (ML.NET TF-IDF + KMeans):**
-1. Extract text from all conversations (concatenate messages)
-2. TF-IDF featurization
-3. KMeans clustering (k = sqrt(n/2) as starting heuristic)
-4. Generate ProjectSuggestion records
-5. Optionally auto-create Project + ProjectConversation if confidence > threshold
+**Original Plan:** ML.NET TF-IDF + KMeans
+**Actual Implementation:** Ollama Embeddings + UMAP + HDBSCAN (better results)
+
+**Actual Approach (Segment-Level UMAP + HDBSCAN):**
+1. Segment conversations into topic-coherent chunks (SegmentationService)
+2. Generate 768-dim embeddings via Ollama nomic-embed-text (EmbeddingCacheService)
+3. UMAP dimensionality reduction (768D → 15D)
+4. HDBSCAN density clustering (MinClusterSize=8)
+5. LLM-generated cluster names via mistral:7b
+6. Generate ProjectSuggestion records with segment/conversation counts
 
 **Components:**
 ```
 ChatLake.Inference/
   Clustering/
-    ConversationClusteringPipeline.cs
-    ClusteringOptions.cs
+    UmapHdbscanPipeline.cs        ← Main pipeline
+    HdbscanClusteringPipeline.cs  ← Direct HDBSCAN (deprecated)
+    EmbeddingClusteringPipeline.cs ← KMeans fallback
 
 ChatLake.Core/
   Services/
     IClusteringService.cs
+    ISegmentationService.cs       ← NEW
+    IEmbeddingCacheService.cs     ← NEW
+    ILlmService.cs                ← NEW
+
+ChatLake.Infrastructure/
+  Gold/Services/
+    ClusteringService.cs
+    OllamaService.cs              ← NEW
+  Conversations/Services/
+    SegmentationService.cs        ← NEW
 ```
 
 **Tasks:**
-- [ ] Add ML.NET packages (Microsoft.ML, Microsoft.ML.Transforms.Text)
-- [ ] Implement TF-IDF + KMeans pipeline
-- [ ] Create ProjectSuggestion records with confidence scores
-- [ ] Unit tests for clustering determinism
-- [ ] Integration test: cluster sample conversations
+- [x] Add ML.NET packages (Microsoft.ML)
+- [x] Add UMAP/HdbscanSharp packages
+- [x] Add OllamaSharp package
+- [x] Implement segment-level analysis
+- [x] Implement UMAP + HDBSCAN pipeline
+- [x] Create ProjectSuggestion records with confidence scores
+- [x] Interactive cluster visualization (Plotly.js)
+- [x] Suggestions grouped by InferenceRun
 
-**DoD:**
+**DoD:** ✅ COMPLETE
 - ProjectSuggestion records created for each cluster
 - Confidence scores populated
-- Results reproducible (same input → same clusters)
+- Results reproducible (seeded UMAP + HDBSCAN)
+- 56 clusters from 1,624 segments (MinClusterSize=8)
 
 ---
 
-### ML-03 — Topic Extraction
+### ML-03 — Topic Extraction ⏸️ DEFERRED (Replaced by Segment Analysis)
 
 **Objective:** Label conversations with topic keywords
 
-**Approach:**
-1. Use TF-IDF to extract top keywords per conversation
-2. Optionally use LDA (Latent Dirichlet Allocation) for topic modeling
-3. Create Topic records for discovered topics
-4. Create ConversationTopic assignments with scores
+**Status:** The segment-level clustering approach (ML-02) provides better topic discovery
+than traditional LDA/TF-IDF keyword extraction. Each cluster IS a topic.
+
+**Original Approach:** TF-IDF keywords + LDA
+**Alternative:** Cluster names from LLM serve as topic labels
+
+**Future consideration:**
+- Could extract keywords from segment text for search
+- Could use cluster names as de-facto topics
 
 **Tasks:**
-- [ ] Implement keyword extraction (top N TF-IDF terms)
-- [ ] Create Topic + ConversationTopic records
-- [ ] Expose topics in conversation API response
+- [ ] ~Implement keyword extraction~ (deferred)
+- [ ] ~Create Topic + ConversationTopic records~ (deferred)
+- [ ] Consider: use cluster names as topic labels
 
-**DoD:**
-- Each conversation has 1-5 topic assignments
-- Topics visible in conversation detail view
+**DoD:** ⏸️ DEFERRED
+- Segment clustering provides equivalent functionality
 
 ---
 
-### ML-05 — Similarity Detection
+### ML-05 — Similarity Detection ⚠️ STUB EXISTS (Next Priority)
 
 **Objective:** Enable "Have I solved this before?" via conversation similarity
 
-**Approach:**
-1. Compute TF-IDF vectors for all conversations
-2. Calculate cosine similarity between all pairs
-3. Store edges where similarity > threshold (e.g., 0.3)
-4. Optionally: add ONNX embedding support later
+**Status:** Service stub exists but not functional. Now that we have segment embeddings,
+this becomes much easier to implement.
+
+**Updated Approach (using segment embeddings):**
+1. Use cached segment embeddings (already have 1,624 × 768-dim vectors)
+2. Calculate cosine similarity between segments
+3. Store edges where similarity > threshold (e.g., 0.7)
+4. Show "Related Segments" from different conversations
 
 **Performance consideration:**
-- N conversations = N² comparisons
-- For 1,293 conversations: ~835k comparisons
-- Batch and threshold aggressively
+- 1,624 segments = ~1.3M comparisons
+- But embeddings already exist (no generation cost)
+- Can use approximate nearest neighbors for speed
 
 **Tasks:**
-- [ ] Implement pairwise cosine similarity
-- [ ] Store ConversationSimilarity edges (A < B ordering)
-- [ ] Add "Related Conversations" to API
+- [ ] Implement pairwise cosine similarity using segment embeddings
+- [ ] Store ConversationSimilarity edges
+- [ ] Add "Related Conversations" panel to conversation viewer
 - [ ] Performance test with full dataset
 
 **DoD:**
-- Similar conversations discoverable via API
+- Similar conversations/segments discoverable via API
 - UI shows related conversations panel
 
 ---
 
-### ML-04 — Drift Metric Calculation
+### ML-04 — Drift Metric Calculation ⚠️ STUB EXISTS (Lower Priority)
 
 **Objective:** Detect topic creep within projects over time
 
-**Prerequisite:** ML-02 (clustering) + ML-03 (topics)
+**Prerequisite:** ML-02 (clustering) ✅ + Projects with conversations assigned
 
-**Approach:**
-1. For each project, collect conversations by time window
-2. Compute topic distribution per window
-3. Calculate drift as KL divergence or cosine distance between windows
+**Status:** Service stub exists. Requires projects to have conversations assigned first.
+Less urgent since segment clustering already groups by topic.
+
+**Updated Approach (using segment embeddings):**
+1. For each project, collect segment embeddings by time window
+2. Compute centroid embedding per window
+3. Calculate drift as cosine distance between window centroids
 4. Store ProjectDriftMetric records
 
 **Tasks:**
-- [ ] Implement rolling window analysis
-- [ ] Calculate drift scores
+- [ ] Implement rolling window analysis on segments
+- [ ] Calculate drift scores using embedding centroids
 - [ ] Store ProjectDriftMetric records
+- [ ] Add drift indicator to project detail view
 
 **DoD:**
 - Drift scores computed for each project
@@ -236,139 +262,171 @@ ChatLake.Core/
 
 ---
 
-### ML-06 — Blog Topic Suggestion Engine
+### ML-06 — Blog Topic Suggestion Engine ❌ NOT STARTED
 
 **Objective:** Identify publishable research arcs
 
-**Prerequisite:** ML-02 (projects) + ML-03 (topics)
+**Prerequisite:** ML-02 (clustering) ✅ + Some project suggestions accepted
 
-**Approach:**
-1. Identify projects with >N conversations
-2. Analyze topic coherence and evolution
-3. Generate candidate blog titles/outlines
-4. Store BlogTopicSuggestion records
+**Status:** Not started. Now that clustering works well, this becomes feasible.
+
+**Updated Approach (using clusters as research arcs):**
+1. Identify clusters with >N segments spanning >M conversations
+2. Use LLM to analyze depth/quality of discussion
+3. Generate candidate blog titles/outlines via LLM
+4. Store BlogTopicSuggestion records linked to cluster segments
 
 **Tasks:**
-- [ ] Implement research arc detection heuristics
-- [ ] Generate title + outline suggestions
-- [ ] Link to source conversations
+- [ ] Implement research arc detection (large coherent clusters)
+- [ ] Generate title + outline suggestions via LLM
+- [ ] Link to source segments/conversations
+- [ ] Create Blog Suggestions UI page
 
 **DoD:**
 - Blog suggestions visible in UI
-- Traceable to source conversations
+- Traceable to source conversations/segments
 
 ---
 
 ## Phase 2C: UI Improvements (Parallel Track)
 
-### UI-05 — Enhanced Conversation Viewer
+### UI-05 — Enhanced Conversation Viewer ✅ COMPLETE
 
 **Objective:** Full threaded message display with metadata
 
-**Current state:** Basic list with preview text
+**Status:** ✅ COMPLETE - Chat-style threaded UI implemented
 
-**Target state:**
-- Threaded message display (user/assistant alternating)
-- Message timestamps and roles
-- Topics sidebar
-- Related conversations panel
-- Project assignment display
+**Implemented:**
+- Threaded message display (user/assistant alternating) ✅
+- Message timestamps and roles ✅
+- Chat-bubble styling ✅
+- Code block formatting ✅
+
+**Remaining (when ML features complete):**
+- [ ] Topics sidebar (deferred with ML-03)
+- [ ] Related conversations panel (needs ML-05)
+- [ ] Project assignment display
 
 **Tasks:**
-- [ ] Create `/Conversations/Detail/{id}` page
-- [ ] Render messages in threaded format
-- [ ] Add topics sidebar (when ML-03 complete)
+- [x] Create `/Conversations/Detail/{id}` page
+- [x] Render messages in threaded format
+- [x] Styling for readability
 - [ ] Add related conversations panel (when ML-05 complete)
-- [ ] Styling for readability
 
-**DoD:**
+**DoD:** ✅ CORE COMPLETE
 - Conversations fully readable
 - Metadata visible
-- Related content discoverable
+- Related content: pending ML-05
 
 ---
 
-### UI-03 — Project Dashboard
+### UI-03 — Project Dashboard ✅ BASIC COMPLETE
 
 **Objective:** Primary navigation surface for projects
 
-**Prerequisite:** ML-02 (creates projects)
+**Status:** ✅ Basic implementation complete
 
-**Components:**
-- Project list with conversation counts
-- Project detail view with:
-  - Conversation list
-  - Timeline (volume over time)
-  - Topic breakdown
-  - Drift indicator (when ML-04 complete)
+**Implemented:**
+- Project list page ✅
+- Project detail view with conversation list ✅
+- Conversation count display ✅
+
+**Remaining (when ML features complete):**
+- [ ] Timeline (volume over time) - needs ML-04
+- [ ] Topic breakdown - deferred with ML-03
+- [ ] Drift indicator - needs ML-04
 
 **Tasks:**
-- [ ] Create `/Projects` list page
-- [ ] Create `/Projects/Detail/{id}` page
-- [ ] Add conversation count and date range
-- [ ] Add topic summary (when ML-03 complete)
+- [x] Create `/Projects` list page
+- [x] Create `/Projects/Detail/{id}` page
+- [x] Add conversation count
+- [ ] Add timeline visualization (when ML-04 complete)
 
-**DoD:**
+**DoD:** ✅ CORE COMPLETE
 - Projects navigable
 - Key metrics visible at a glance
 
 ---
 
-### UI-04 — Suggested Projects Inbox
+### UI-04 — Suggested Projects Inbox ✅ ENHANCED
 
 **Objective:** Human-in-the-loop project approval
 
-**Prerequisite:** ML-02 (creates suggestions)
+**Prerequisite:** ML-02 (creates suggestions) ✅
 
-**Actions to support:**
-- Accept → creates Project + assigns conversations
-- Reject → marks suggestion dismissed
-- Merge → combines with existing project
+**Status:** ✅ COMPLETE with enhancements beyond original plan
+
+**Actions supported:**
+- Accept → creates Project + assigns conversations ✅
+- Reject → marks suggestion dismissed ✅
+- Merge → combines with existing project ✅
+- Clear All → removes all pending suggestions ✅
+
+**Enhancements beyond original plan:**
+- Grouped by InferenceRun with collapsible `<details>` sections
+- "Latest" badge on most recent run
+- Run metadata (timestamp, segment count, noise count)
+- Re-cluster (Fast) vs Full Reset (Slow) buttons
+- Segment count + conversation count display
 
 **Tasks:**
-- [ ] Create `/Projects/Suggestions` inbox page
-- [ ] Display cluster preview (sample conversations)
-- [ ] Accept/Reject/Merge buttons with API calls
-- [ ] Persist decisions in UserOverride table
+- [x] Create `/Projects/Suggestions` inbox page
+- [x] Display cluster preview (sample conversations)
+- [x] Accept/Reject/Merge buttons with API calls
+- [x] Group suggestions by inference run
+- [ ] Persist decisions in UserOverride table (deferred)
 
-**DoD:**
+**DoD:** ✅ COMPLETE
 - User can accept/reject all suggestions
-- Decisions persist across inference reruns
+- Suggestions grouped by run for clarity
 
 ---
 
-### UI-06 — Timeline Visualizations
+### UI-06 — Visualizations ✅ CHANGED (Cluster Viz Instead of Timeline)
 
 **Objective:** Visual analytics for cognitive telemetry
 
-**Prerequisite:** ML-03 (topics) + ML-04 (drift)
+**Original Plan:** Timeline + topic bands + drift overlays
+**Actual Implementation:** Interactive cluster visualization (Plotly.js)
 
-**Charts to implement:**
-- Volume over time (conversation count by month)
-- Topic bands (stacked area chart)
-- Drift overlays (line chart)
+**Status:** ✅ COMPLETE (different approach than planned)
 
-**Library options:**
-- Chart.js (client-side, lightweight)
-- Server-rendered SVG (no JS dependency)
+**What was built instead:**
+- 2D UMAP projection of all segment embeddings
+- Each cluster displayed as distinct color
+- Noise points shown in gray background
+- Hover tooltips with segment previews
+- Interactive legend with cluster names and counts
+- Statistics panel: total segments, clusters, noise %, UMAP time
+- localStorage caching for instant re-navigation
+
+**Why the change:**
+- Cluster visualization provides immediate insight into topic groupings
+- Timeline requires ML-04 (drift) which is deferred
+- UMAP projection shows semantic relationships directly
 
 **Tasks:**
-- [ ] Choose charting library
-- [ ] Implement volume timeline
-- [ ] Implement topic distribution chart
-- [ ] Add drift overlay
+- [x] Choose charting library (Plotly.js)
+- [x] Implement cluster visualization
+- [x] Add localStorage caching
+- [ ] Volume timeline (deferred until ML-04)
+- [ ] Topic bands (deferred - segments replace topics)
+- [ ] Drift overlay (deferred until ML-04)
 
-**DoD:**
+**DoD:** ✅ COMPLETE (cluster viz)
 - Charts render accurately
 - Interactive (hover for details)
+- Cached for fast navigation
 
 ---
 
-### UI-07 — Blog Topic Suggestions View
+### UI-07 — Blog Topic Suggestions View ❌ NOT STARTED
 
 **Objective:** Support publishing workflow
 
-**Prerequisite:** ML-06
+**Prerequisite:** ML-06 (Blog Suggestions) ❌
+
+**Status:** ❌ NOT STARTED - Blocked on ML-06
 
 **Components:**
 - List of suggestions with confidence
