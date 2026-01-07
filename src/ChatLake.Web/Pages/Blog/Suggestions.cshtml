@@ -1,0 +1,141 @@
+@page
+@model ChatLake.Web.Pages.Blog.SuggestionsModel
+@{
+    ViewData["Title"] = "Blog Suggestions";
+}
+
+<div class="row mb-4">
+    <div class="col">
+        <h2>Blog Suggestions</h2>
+        <p class="text-muted">AI-evaluated clusters ready for blog content generation</p>
+    </div>
+    <div class="col-auto">
+        <form method="post" asp-page-handler="GenerateBlogs" class="d-inline">
+            <button type="submit" class="btn btn-primary" id="generateBtn">
+                <span class="btn-text">Evaluate & Generate</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+            </button>
+        </form>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Model.Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!Model.Suggestions.Any())
+{
+    <div class="card">
+        <div class="card-body text-center text-muted py-5">
+            <h5>No pending blog suggestions</h5>
+            <p>Click "Evaluate & Generate" to analyze accepted clusters and create blog content.</p>
+            <p class="small">Make sure you have accepted some project suggestions first.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-header">
+            <strong>Pending Blog Suggestions</strong>
+            <span class="badge bg-primary float-end">@Model.Suggestions.Count</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Title</th>
+                        <th>Cluster</th>
+                        <th class="text-center">Score</th>
+                        <th class="text-center">Words</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var blog in Model.Suggestions)
+                    {
+                        var scoreColor = blog.OverallScore >= 0.8m ? "success" :
+                            blog.OverallScore >= 0.6m ? "warning" : "danger";
+                        <tr>
+                            <td>
+                                <a asp-page="/Blog/Detail" asp-route-id="@blog.BlogTopicSuggestionId"
+                                    class="text-decoration-none fw-medium">
+                                    @blog.Title
+                                </a>
+                            </td>
+                            <td class="text-muted">@(blog.ClusterName ?? "—")</td>
+                            <td class="text-center">
+                                <span class="badge bg-@scoreColor">@blog.OverallScore.ToString("P0")</span>
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1"
+                                    data-bs-toggle="popover"
+                                    data-bs-trigger="hover"
+                                    data-bs-html="true"
+                                    title="Evaluation Breakdown"
+                                    data-bs-content="
+                                        <div class='small'>
+                                            <div>Educational: @blog.EducationalValue.ToString("P0")</div>
+                                            <div>Problem-Solving: @blog.ProblemSolvingDepth.ToString("P0")</div>
+                                            <div>Coherence: @blog.TopicCoherence.ToString("P0")</div>
+                                            <div>Completeness: @blog.ContentCompleteness.ToString("P0")</div>
+                                            <div>Interest: @blog.ReaderInterest.ToString("P0")</div>
+                                            @if (!string.IsNullOrEmpty(blog.Reasoning))
+                                            {
+                                                <hr class='my-1'>
+                                                <div class='fst-italic'>@blog.Reasoning</div>
+                                            }
+                                        </div>">
+                                    <small>?</small>
+                                </button>
+                            </td>
+                            <td class="text-center">@(blog.WordCount?.ToString("N0") ?? "—")</td>
+                            <td class="text-end">
+                                <a asp-page="/Blog/Detail" asp-route-id="@blog.BlogTopicSuggestionId"
+                                    class="btn btn-sm btn-outline-primary">Preview</a>
+
+                                <form method="post" asp-page-handler="Approve" class="d-inline">
+                                    <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+
+                                <form method="post" asp-page-handler="Dismiss" class="d-inline">
+                                    <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Dismiss</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+    // Show spinner on generate
+    document.getElementById('generateBtn')?.closest('form')?.addEventListener('submit', function() {
+        const btn = document.getElementById('generateBtn');
+        btn.disabled = true;
+        btn.querySelector('.btn-text').textContent = 'Generating...';
+        btn.querySelector('.spinner-border').classList.remove('d-none');
+    });
+
+    // Initialize popovers
+    var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+    popoverTriggerList.map(function (popoverTriggerEl) {
+        return new bootstrap.Popover(popoverTriggerEl);
+    });
+</script>
+}

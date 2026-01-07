@@ -1,0 +1,239 @@
+@page "{id:long}"
+@model ChatLake.Web.Pages.Blog.DetailModel
+@{
+    ViewData["Title"] = Model.Blog?.Title ?? "Blog Detail";
+}
+
+<div class="row mb-3">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-page="/Blog/Suggestions">Blog Suggestions</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Preview</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Model.Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (Model.Blog != null)
+{
+    var blog = Model.Blog;
+    var scoreColor = blog.OverallScore >= 0.8m ? "success" :
+        blog.OverallScore >= 0.6m ? "warning" : "danger";
+
+    <div class="row mb-4">
+        <div class="col">
+            <h2>@blog.Title</h2>
+            <p class="text-muted mb-0">
+                <span class="badge bg-@scoreColor me-2">@blog.OverallScore.ToString("P0") Score</span>
+                <span class="badge bg-secondary me-2">@(blog.WordCount?.ToString("N0") ?? "—") words</span>
+                @if (blog.GeneratedAtUtc.HasValue)
+                {
+                    <small>Generated @blog.GeneratedAtUtc.Value.ToString("MMM dd, yyyy HH:mm") UTC</small>
+                }
+            </p>
+        </div>
+        <div class="col-auto">
+            <div class="btn-group">
+                @if (Model.ShowRaw)
+                {
+                    <a asp-page="/Blog/Detail" asp-route-id="@blog.BlogTopicSuggestionId"
+                        class="btn btn-outline-secondary">Preview</a>
+                }
+                else
+                {
+                    <a asp-page="/Blog/Detail" asp-route-id="@blog.BlogTopicSuggestionId" asp-route-raw="true"
+                        class="btn btn-outline-secondary">Raw Markdown</a>
+                }
+
+                <a asp-page="/Blog/Detail" asp-page-handler="Export" asp-route-id="@blog.BlogTopicSuggestionId"
+                    class="btn btn-outline-secondary">Export .md</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>@(Model.ShowRaw ? "Markdown Source" : "Content Preview")</strong>
+                    <span class="badge bg-@(blog.Status == "Pending" ? "warning" : blog.Status == "Approved" ? "success" : "secondary")">
+                        @blog.Status
+                    </span>
+                </div>
+                <div class="card-body">
+                    @if (Model.ShowRaw)
+                    {
+                        <pre class="mb-0" style="white-space: pre-wrap; font-family: 'Consolas', monospace; font-size: 0.85rem;">@blog.BlogContentMarkdown</pre>
+                    }
+                    else
+                    {
+                        <div class="blog-preview" style="line-height: 1.7;">
+                            @Html.Raw(RenderMarkdown(blog.BlogContentMarkdown ?? ""))
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Actions</strong>
+                </div>
+                <div class="card-body">
+                    @if (blog.Status == "Pending")
+                    {
+                        <form method="post" asp-page-handler="Approve" class="mb-2">
+                            <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                            <button type="submit" class="btn btn-success w-100">Approve</button>
+                        </form>
+
+                        <form method="post" asp-page-handler="Regenerate" class="mb-2">
+                            <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                            <button type="submit" class="btn btn-outline-primary w-100">Regenerate All</button>
+                        </form>
+
+                        <form method="post" asp-page-handler="ReEvaluate" class="mb-2">
+                            <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                            <button type="submit" class="btn btn-outline-secondary w-100">Re-Evaluate Scores</button>
+                        </form>
+
+                        <form method="post" asp-page-handler="Dismiss">
+                            <input type="hidden" name="id" value="@blog.BlogTopicSuggestionId" />
+                            <button type="submit" class="btn btn-outline-danger w-100">Dismiss</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0 text-center">
+                            This blog has been @blog.Status.ToLower()
+                        </p>
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <strong>Evaluation Scores</strong>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">Educational Value</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar @GetBarColor(blog.EducationalValue)" role="progressbar"
+                                style="width: @(blog.EducationalValue * 100)%">
+                                @blog.EducationalValue.ToString("P0")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Problem-Solving Depth</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar @GetBarColor(blog.ProblemSolvingDepth)" role="progressbar"
+                                style="width: @(blog.ProblemSolvingDepth * 100)%">
+                                @blog.ProblemSolvingDepth.ToString("P0")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Topic Coherence</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar @GetBarColor(blog.TopicCoherence)" role="progressbar"
+                                style="width: @(blog.TopicCoherence * 100)%">
+                                @blog.TopicCoherence.ToString("P0")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Content Completeness</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar @GetBarColor(blog.ContentCompleteness)" role="progressbar"
+                                style="width: @(blog.ContentCompleteness * 100)%">
+                                @blog.ContentCompleteness.ToString("P0")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Reader Interest</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar @GetBarColor(blog.ReaderInterest)" role="progressbar"
+                                style="width: @(blog.ReaderInterest * 100)%">
+                                @blog.ReaderInterest.ToString("P0")
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(blog.Reasoning))
+                    {
+                        <hr />
+                        <p class="small text-muted fst-italic mb-0">@blog.Reasoning</p>
+                    }
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <strong>Source</strong>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(blog.ClusterName))
+                    {
+                        <p class="mb-1"><small class="text-muted">Cluster:</small> @blog.ClusterName</p>
+                    }
+                    <p class="mb-1"><small class="text-muted">Conversations:</small> @blog.SourceConversationIds.Count</p>
+                    <p class="mb-0"><small class="text-muted">Segments:</small> @blog.SourceSegmentIds.Count</p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@functions {
+    string GetBarColor(decimal score)
+    {
+        return score >= 0.8m ? "bg-success" :
+            score >= 0.6m ? "bg-warning" : "bg-danger";
+    }
+
+    string RenderMarkdown(string markdown)
+    {
+        if (string.IsNullOrEmpty(markdown))
+            return "";
+
+        // Basic markdown to HTML conversion
+        // In production, use a library like Markdig
+        var html = System.Text.RegularExpressions.Regex.Replace(markdown, @"^### (.+)$", "<h3>$1</h3>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^## (.+)$", "<h2>$1</h2>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^# (.+)$", "<h1>$1</h1>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.+?)\*", "<em>$1</em>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"`([^`]+)`", "<code>$1</code>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"```(\w*)\n([\s\S]*?)```", "<pre class=\"bg-light p-3 rounded\"><code>$2</code></pre>");
+
+        // Paragraphs
+        var paragraphs = html.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        html = string.Join("", paragraphs.Select(p =>
+            p.StartsWith("<h") || p.StartsWith("<pre") || p.StartsWith("<ul") || p.StartsWith("<ol")
+                ? p
+                : $"<p>{p.Replace("\n", " ")}</p>"));
+
+        return html;
+    }
+}

@@ -37,9 +37,10 @@ builder.Services.AddScoped<IProjectSuggestionService, ProjectSuggestionService>(
 builder.Services.AddScoped<ITopicExtractionService, TopicExtractionService>();
 builder.Services.AddScoped<IDriftDetectionService, DriftDetectionService>();
 builder.Services.AddScoped<ISimilarityService, SimilarityService>();
+builder.Services.AddScoped<IBlogSuggestionService, BlogSuggestionService>();
 
 builder.Services.AddControllersWithViews();
-builder.Services.AddRazorPages(); 
+builder.Services.AddRazorPages();
 
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -85,7 +86,7 @@ else
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles(); 
+app.UseStaticFiles();
 app.UseRouting();
 
 app.UseAuthorization();
@@ -94,6 +95,6 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-app.MapRazorPages();   
+app.MapRazorPages();
 
 app.Run();

@@ -26,6 +26,18 @@ public class BlogTopicSuggestionConfiguration : IEntityTypeConfiguration<BlogTop
             .IsRequired()
             .HasMaxLength(20);
 
+        // New fields for blog content generation
+        builder.Property(e => e.BlogContentMarkdown);
+
+        builder.Property(e => e.EvaluationScoreJson);
+
+        builder.Property(e => e.SourceSegmentIdsJson);
+
+        builder.Property(e => e.WordCount);
+
+        builder.Property(e => e.GeneratedAtUtc);
+
+        // Relationships
         builder.HasOne(e => e.InferenceRun)
             .WithMany()
             .HasForeignKey(e => e.InferenceRunId)
@@ -36,10 +48,19 @@ public class BlogTopicSuggestionConfiguration : IEntityTypeConfiguration<BlogTop
             .HasForeignKey(e => e.ProjectId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(e => e.ProjectSuggestion)
+            .WithMany()
+            .HasForeignKey(e => e.ProjectSuggestionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Indexes
         builder.HasIndex(e => e.Status)
             .HasDatabaseName("IX_BlogTopicSuggestion_Status");
 
         builder.HasIndex(e => e.Confidence)
             .HasDatabaseName("IX_BlogTopicSuggestion_Confidence");
+
+        builder.HasIndex(e => e.ProjectSuggestionId)
+            .HasDatabaseName("IX_BlogTopicSuggestion_ProjectSuggestionId");
     }
 }

@@ -1,3 +1,5 @@
+using ChatLake.Core.Models;
+
 namespace ChatLake.Core.Services;
 
 /// <summary>
@@ -36,4 +38,40 @@ public interface ILlmService
     /// Check if embedding generation is available.
     /// </summary>
     Task<bool> IsEmbeddingAvailableAsync(CancellationToken cancellationToken = default);
+
+    // ===== Blog Generation Methods =====
+
+    /// <summary>
+    /// Evaluate a cluster of conversation segments for blog-worthiness.
+    /// </summary>
+    Task<BlogEvaluationScores> EvaluateClusterForBlogAsync(
+        IReadOnlyList<string> segmentTexts,
+        string clusterName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generate a compelling blog title from cluster content.
+    /// </summary>
+    Task<string> GenerateBlogTitleAsync(
+        IReadOnlyList<string> segmentTexts,
+        string clusterName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generate a structured outline for a blog post.
+    /// </summary>
+    Task<BlogOutline> GenerateBlogOutlineAsync(
+        IReadOnlyList<string> segmentTexts,
+        string title,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generate full blog content in markdown format.
+    /// </summary>
+    Task<string> GenerateBlogContentAsync(
+        IReadOnlyList<string> segmentTexts,
+        string title,
+        BlogOutline outline,
+        int targetWordCount,
+        CancellationToken cancellationToken = default);
 }

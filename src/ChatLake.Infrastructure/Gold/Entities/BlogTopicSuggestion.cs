@@ -18,6 +18,12 @@ public class BlogTopicSuggestion
     public long? ProjectId { get; set; }
     public Project? Project { get; set; }
 
+    /// <summary>
+    /// Link to the ProjectSuggestion (cluster) this blog was generated from.
+    /// </summary>
+    public long? ProjectSuggestionId { get; set; }
+    public ProjectSuggestion? ProjectSuggestion { get; set; }
+
     public string Title { get; set; } = null!;
 
     /// <summary>
@@ -26,7 +32,18 @@ public class BlogTopicSuggestion
     public string? OutlineJson { get; set; }
 
     /// <summary>
-    /// Confidence score (0.0000–1.0000)
+    /// Full markdown content of the generated blog post.
+    /// </summary>
+    public string? BlogContentMarkdown { get; set; }
+
+    /// <summary>
+    /// JSON containing evaluation criteria scores.
+    /// Example: {"educationalValue":0.85,"problemSolvingDepth":0.72,...}
+    /// </summary>
+    public string? EvaluationScoreJson { get; set; }
+
+    /// <summary>
+    /// Confidence/overall score (0.0000–1.0000)
     /// </summary>
     public decimal Confidence { get; set; }
 
@@ -36,7 +53,22 @@ public class BlogTopicSuggestion
     public string SourceConversationIdsJson { get; set; } = null!;
 
     /// <summary>
+    /// JSON array of source segment IDs used for content generation.
+    /// </summary>
+    public string? SourceSegmentIdsJson { get; set; }
+
+    /// <summary>
+    /// Word count of generated content.
+    /// </summary>
+    public int? WordCount { get; set; }
+
+    /// <summary>
     /// Status: Pending, Approved, Dismissed
     /// </summary>
     public string Status { get; set; } = "Pending";
+
+    /// <summary>
+    /// When the blog content was generated.
+    /// </summary>
+    public DateTime? GeneratedAtUtc { get; set; }
 }
