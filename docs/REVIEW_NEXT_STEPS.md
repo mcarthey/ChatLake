@@ -2,11 +2,94 @@
 
 **Last Updated:** 2026-01-07
 
-This document provides current status and recommended next steps aligned with the original goals in DELIVERY_PLAN.md.
+This document tracks implementation status vs original plans and provides recommended next steps.
 
 ---
 
-## Current Status vs BAT Exit Criteria
+## Executive Summary
+
+**Phase 1 (Bronze + Silver):** ✅ COMPLETE
+- 200MB file import successful
+- 1,293 conversations / 41,879 messages imported
+- Streaming parser with progress tracking
+
+**Phase 2 (Gold / ML):** 🔄 IN PROGRESS (with architectural changes)
+- Original plan: ML.NET TF-IDF + KMeans
+- Actual: Ollama embeddings + UMAP + HDBSCAN (better results)
+- Segment-level analysis added (not in original plan)
+
+---
+
+## What Changed From Original Plan
+
+### ML Architecture (Major Change)
+
+**Original Plan:**
+```
+Conversations → TF-IDF → KMeans → Project Suggestions
+```
+
+**Actual Implementation:**
+```
+Conversations → Segmentation → Ollama Embeddings → UMAP → HDBSCAN → LLM Naming → Project Suggestions
+```
+
+**Why the change:**
+1. TF-IDF + KMeans produced poor results (overlapping topics, no natural clusters)
+2. Local LLM (Ollama) provides semantic embeddings without cloud dependency
+3. UMAP + HDBSCAN is the industry standard (BERTopic approach)
+4. Segment-level analysis handles multi-topic conversations better
+
+### New Components (Not In Original Plan)
+
+| Component | Purpose |
+|-----------|---------|
+| `ConversationSegment` | Topic-coherent chunks within conversations |
+| `SegmentEmbedding` | Cached 768-dim vectors from Ollama |
+| `SegmentationService` | Splits conversations using embedding similarity |
+| `EmbeddingCacheService` | Stores/retrieves embeddings with hash validation |
+| `UmapHdbscanPipeline` | Industry-standard clustering algorithm |
+| `OllamaService` | Local LLM for embeddings + cluster naming |
+| `ClusterVisualization` | Interactive 2D UMAP projection (Plotly.js) |
+| `ConsoleLog` | Timestamped logging helper |
+
+---
+
+## Current Clustering Pipeline
+
+```
+1. Segmentation Phase
+   └─ Load conversations without segments
+   └─ Sliding window embedding similarity
+   └─ Split at topic boundaries (similarity < 0.55)
+   └─ Create ConversationSegment records
+
+2. Embedding Phase
+   └─ Load segments without embeddings
+   └─ Generate via Ollama (nomic-embed-text, 768D)
+   └─ Cache in SegmentEmbedding table
+   └─ Hash-based invalidation for changes
+
+3. Clustering Phase
+   └─ Load all segment embeddings
+   └─ UMAP reduction (768D → 15D)
+   └─ HDBSCAN density clustering (MinClusterSize=8)
+   └─ Identify noise points
+
+4. Naming Phase
+   └─ Sample 12 segments per cluster
+   └─ LLM generates common theme name (mistral:7b)
+   └─ Create ProjectSuggestion records
+
+5. Human Review
+   └─ Accept → Create Project + assign conversations
+   └─ Reject → Mark dismissed
+   └─ Merge → Add to existing project
+```
+
+---
+
+## BAT Exit Criteria Status
 
 From DELIVERY_PLAN.md §9:
 
@@ -18,33 +101,68 @@ From DELIVERY_PLAN.md §9:
 | 4 | ML outputs traceable | ✅ DONE | InferenceRun tracks all ML operations |
 | 5 | No personal data in repo | ✅ DONE | All data in local SQLite |
 | 6 | Auth required | ⏸️ DEFERRED | Single-user localhost, not needed yet |
-| 7 | Docs enable onboarding | ✅ DONE | Updated all core docs today |
+| 7 | Docs enable onboarding | ✅ DONE | Updated all core docs |
 
 **Summary:** 5/7 criteria met, 1 partial, 1 deferred (appropriate for current stage)
 
 ---
 
-## What's Working Well
+## Detailed Status By Workstream
 
-### Core Pipeline (Bronze → Silver)
-- 200MB file import successful (1,293 conversations, 41,879 messages)
-- Streaming parser with progress tracking
-- Batched commits (50 per batch)
-- Import cleanup for failed batches
+### Foundation (DB-GOLD + ML-01)
 
-### ML Pipeline (Silver → Gold)
-- Segment-level analysis (1,624 topic-coherent chunks)
-- Ollama embeddings (768-dim, cached in DB)
-- UMAP + HDBSCAN clustering (56 natural clusters)
-- LLM-generated cluster names
-- Full human-in-the-loop workflow (accept/reject/merge)
+| Task | Status | Notes |
+|------|--------|-------|
+| Gold tier schema | ✅ DONE | All tables created |
+| InferenceRun framework | ✅ DONE | Tracks all ML operations |
+| EF Core migrations | ✅ DONE | Schema matches implementation |
 
-### UI
-- Conversation list with meaningful summaries
-- Chat-style conversation viewer
-- Project suggestions inbox (grouped by run)
-- Interactive cluster visualization (Plotly.js)
-- Project dashboard with conversation lists
+### ML Features
+
+| Task | Original Plan | Actual Status | Notes |
+|------|---------------|---------------|-------|
+| ML-02 Clustering | TF-IDF + KMeans | ✅ **DONE (changed)** | UMAP + HDBSCAN with Ollama |
+| ML-03 Topics | LDA extraction | ⏸️ SKIPPED | Segment analysis replaces this |
+| ML-04 Drift | Rolling window | ⚠️ STUB ONLY | Service exists, not functional |
+| ML-05 Similarity | Cosine edges | ✅ DONE | Embedding-based similarity detection |
+| ML-06 Blog Topics | Arc detection | 🔄 IN PROGRESS | Schema and service scaffolded |
+
+### UI Features
+
+| Task | Status | Notes |
+|------|--------|-------|
+| UI-03 Project Dashboard | ✅ DONE | Basic list with counts |
+| UI-04 Suggestions Inbox | ✅ ENHANCED | Grouped by run, collapsible |
+| UI-05 Conversation Viewer | ✅ DONE | Chat-style threaded UI |
+| UI-06 Visualizations | ✅ CHANGED | Cluster viz instead of timeline |
+| UI-07 Blog Suggestions | 🔄 IN PROGRESS | Basic page scaffolded |
+
+### Import Pipeline
+
+| Task | Status | Notes |
+|------|--------|-------|
+| IMP-01 ImportBatch | ✅ DONE | With progress tracking |
+| IMP-02 RawArtifact | ✅ DONE | SHA-256 hashes |
+| IMP-03 ChatGPT Parser | ✅ DONE | Streaming, element-by-element |
+| IMP-04 Fingerprint | ⏸️ DEFERRED | Not needed until reimport scenarios |
+| IMP-05 Normalization | ✅ DONE | Batched commits |
+| IMP-06 Observations | ⏸️ DEFERRED | Low priority |
+
+---
+
+## Performance Characteristics
+
+| Operation | Duration | Notes |
+|-----------|----------|-------|
+| Full Reset (all phases) | 30-60 min | Regenerates segments + embeddings |
+| Re-cluster (Fast) | ~30 sec | Uses cached embeddings |
+| Visualization | ~4 sec | UMAP to 2D + render |
+
+**Current Stats:**
+- 1,293 conversations
+- ~1,624 segments
+- 56 clusters (MinClusterSize=8)
+- ~400 noise segments (24.6%)
 
 ---
 
@@ -52,96 +170,54 @@ From DELIVERY_PLAN.md §9:
 
 ### High Priority: Complete Core Value Features
 
-#### 1. ML-05 — Similarity Detection ("Have I solved this before?")
-**Value:** Find related conversations across entire history
-**Effort:** Low-Medium (infrastructure exists)
+#### 1. ML-06 — Blog Topic Suggestions
+**Value:** Identify publishable research arcs from conversation history
+**Status:** Schema exists, service scaffolded
 **Approach:**
-- Use existing segment embeddings
-- Calculate cosine similarity between segments
-- Store edges in ConversationSimilarity table (exists)
-- Add "Related Conversations" panel to viewer
+- Identify clusters with >N segments spanning >M conversations
+- Generate outline via LLM (analyze segment text)
+- Store BlogTopicSuggestion records
+- Link to source segments/conversations
 
-**Why now:** Segment embeddings already cached; minimal new work
+#### 2. UI-07 — Blog Suggestions View
+**Value:** Browsable interface for blog candidates
+**Approach:**
+- List suggestions with confidence scores
+- Show outline preview
+- Link to source conversations
 
-#### 2. Test Incremental Import Scenario
+#### 3. Test Incremental Import Scenario
 **Value:** Confirm new exports merge cleanly with existing data
-**Effort:** Low
 **Approach:**
 - Export new conversations from ChatGPT
 - Import to existing database
 - Verify no duplicates (by SourceConversationKey)
 - Verify clustering incorporates new data
 
-**Why now:** Validates real-world usage pattern
-
-#### 3. Accept/Use Project Suggestions
-**Value:** Demonstrate full workflow from clustering to organized projects
-**Effort:** Low (UI exists)
-**Approach:**
-- Accept promising clusters to create projects
-- Test project detail view with assigned conversations
-- Verify conversation assignment tracking
-
-**Why now:** Closes the loop on clustering → organization
-
 ---
 
-### Medium Priority: Complete Phase 2 ML
+### Medium Priority: Polish & Future
 
-#### 4. ML-06 — Blog Topic Suggestions
-**Value:** Identify publishable research arcs from conversation history
-**Effort:** Medium
-**Approach:**
-- Identify clusters with >N segments spanning >M conversations
-- Generate outline via LLM (analyze segment text)
-- Store BlogTopicSuggestion records (table exists)
-- Link to source segments/conversations
-
-**Why now:** Building on solid clustering foundation
-
-#### 5. UI-07 — Blog Suggestions View
-**Value:** Browsable interface for blog candidates
-**Effort:** Low
-**Approach:**
-- List suggestions with confidence scores
-- Show outline preview
-- Link to source conversations
-
-**Why now:** Pairs with ML-06
-
----
-
-### Lower Priority: Polish & Future
-
-#### 6. IMP-04 — Message Fingerprint Idempotency
-**Value:** Safe reimport of overlapping exports
-**Effort:** Medium
-**Approach:**
-- Implement canonical fingerprint generator
-- Add unique constraint on MessageFingerprintSha256
-- Unit test determinism
-
-**Why deferred:** Single import scenario works; reimport not common yet
-
-#### 7. Timeline Visualizations
+#### 4. Timeline Visualizations
 **Value:** Volume over time, topic trends
-**Effort:** Medium
 **Approach:**
 - Chart.js or Plotly for time-series
 - Aggregate by month/week
 - Optional: topic breakdown stacked area
 
-**Why deferred:** Cluster visualization provides more immediate value
-
-#### 8. Drift Detection (ML-04)
+#### 5. Drift Detection (ML-04)
 **Value:** Detect topic creep within projects over time
-**Effort:** Medium
 **Approach:**
 - Rolling window on project segment embeddings
 - Calculate centroid drift over time windows
 - Store ProjectDriftMetric records
 
-**Why deferred:** Requires projects to have meaningful history
+#### 6. IMP-04 — Message Fingerprint Idempotency
+**Value:** Safe reimport of overlapping exports
+**Approach:**
+- Implement canonical fingerprint generator
+- Add unique constraint on MessageFingerprintSha256
+- Unit test determinism
 
 ---
 
@@ -158,21 +234,38 @@ From DELIVERY_PLAN.md §9:
 
 ---
 
-## Implementation Status Summary
+## Files Added Since Phase 2 Started
 
-| Workstream | Complete | In Progress | Not Started |
-|------------|----------|-------------|-------------|
-| Foundation (FND) | All | - | - |
-| Database (DB) | All | - | - |
-| Import (IMP) | 4/6 | - | Fingerprint, Observations |
-| API (API) | Partial | - | Formal REST endpoints |
-| ML (ML) | 2/6 | - | Similarity, Drift, Blog |
-| UI (UI) | 5/7 | - | Blog View, Timeline |
-| QA (QA) | Partial | - | Formal test suite |
+### Core Services
+- `src/ChatLake.Core/Services/ILlmService.cs`
+- `src/ChatLake.Core/Services/ISegmentationService.cs`
+- `src/ChatLake.Core/Services/IEmbeddingCacheService.cs`
+- `src/ChatLake.Core/Services/IBlogSuggestionService.cs`
+
+### Infrastructure
+- `src/ChatLake.Infrastructure/Logging/ConsoleLog.cs`
+- `src/ChatLake.Infrastructure/Gold/Services/OllamaService.cs`
+- `src/ChatLake.Infrastructure/Conversations/Services/SegmentationService.cs`
+- `src/ChatLake.Infrastructure/Gold/Services/EmbeddingCacheService.cs`
+- `src/ChatLake.Infrastructure/Gold/Services/BlogSuggestionService.cs`
+
+### Entities
+- `src/ChatLake.Infrastructure/Conversations/Entities/ConversationSegment.cs`
+- `src/ChatLake.Infrastructure/Gold/Entities/SegmentEmbedding.cs`
+
+### ML Pipelines
+- `src/ChatLake.Inference/Clustering/UmapHdbscanPipeline.cs`
+- `src/ChatLake.Inference/Clustering/HdbscanClusteringPipeline.cs`
+- `src/ChatLake.Inference/Clustering/EmbeddingClusteringPipeline.cs`
+
+### UI
+- `src/ChatLake.Web/Pages/Analysis/ClusterVisualization.cshtml`
+- `src/ChatLake.Web/Pages/Blog/` (new directory)
+- `src/ChatLake.Web/Controllers/ClusteringApiController.cs`
 
 ---
 
-## Quick Wins (< 1 hour each)
+## Quick Wins
 
 1. **Run the visualization** - See current clusters at `/Analysis/ClusterVisualization`
 2. **Accept a few suggestions** - Test project creation workflow
@@ -181,20 +274,11 @@ From DELIVERY_PLAN.md §9:
 
 ---
 
-## Files Modified This Session
-
-- `docs/IMPLEMENTATION_STATUS.md` - Created comprehensive status doc
-- `docs/PHASE2_EXECUTION_PLAN.md` - Updated with actual status markers
-- `docs/OLLAMA_INTEGRATION.md` - Updated for UMAP+HDBSCAN architecture
-- `docs/REVIEW_NEXT_STEPS.md` - This document (updated)
-
----
-
 ## Conclusion
 
 The core clustering and suggestion pipeline is **complete and working**. The highest-value next steps are:
 
-1. **Similarity detection** - Enable "Have I solved this before?"
+1. **Blog topic suggestions** - Complete ML-06 and UI-07
 2. **Incremental import test** - Validate real-world usage
 3. **Accept suggestions** - Create actual projects from clusters
 

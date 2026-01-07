@@ -4,7 +4,7 @@
 **Prerequisite:** Phase 1 Complete (200MB import successful, streaming pipeline, progress tracking)
 **Goal:** Implement Gold tier ML features with concurrent UI improvements
 
-> **Note:** Implementation diverged from original plan. See `IMPLEMENTATION_STATUS.md` for details.
+> **Note:** Implementation diverged from original plan. See `REVIEW_NEXT_STEPS.md` for current status.
 > Key change: Replaced ML.NET TF-IDF + KMeans with Ollama embeddings + UMAP + HDBSCAN.
 
 ---
